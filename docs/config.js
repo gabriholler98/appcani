@@ -1,2 +1,1 @@
-// Impostare l'origine HTTPS del Worker prima di attivare il servizio condiviso.
-window.INSIEME_API_ORIGIN = "";
+window.INSIEME_API_ORIGIN = "https://appcani-api.gabrieleholler98.workers.dev";
