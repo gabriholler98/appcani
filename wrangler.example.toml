@@ -1,0 +1,12 @@
+name = "appcani-api"
+main = "worker.mjs"
+compatibility_date = "2026-11-16"
+
+[vars]
+PAGES_ORIGIN = "https://gabriholler98.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "appcani"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "drizzle"
