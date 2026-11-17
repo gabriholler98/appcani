@@ -1,427 +1,529 @@
-import { setupAccounts } from "./account-client.js?v=3";
-import { currentPushEndpoint, setupNotifications } from "./notification-client.js";
+import { setupAccounts } from "./account-client.js?v=4";
+import { currentPushEndpoint, setupNotifications } from "./notification-client.js?v=4";
+import { setupPeople } from "./people-ui.js";
+import { setupChat } from "./chat.js";
+import { announce,byId,busy,button,dogChoices,dogNames,element,fill,row,schedule,slots,status } from "./ui.js";
 
-const byId = id => document.getElementById(id);
-const app = byId("appView");
-const profileDialog = byId("profileDialog");
-const profileForm = byId("profileForm");
-const walkDialog = byId("walkDialog");
-const walkForm = byId("walkForm");
-let map;
-let markers;
-let chatTimer;
-let selectedWalk;
-let locationChoice;
-let locationMode = "popular";
-let currentProfile;
-let loadId = 0;
-let archiveLoadId = 0;
-const archive = byId("archiveDialog");
-const archiveFilters = document.querySelectorAll("[data-archive-filter]");
-let archiveFilter = "created";
+const app=byId("appView");
+const filtersForm=byId("mapFilters");
+const walkForm=byId("walkForm");
+const joinForm=byId("joinForm");
+const detailsDialog=byId("detailsDialog");
+const summaryDialog=byId("summaryDialog");
+const sections={explore:"Esplora",plans:"Le mie passeggiate",people:"Cerca",profile:"Profilo"};
+const requestLabels={pending:"In attesa",accepted:"Confermata",withdrawn:"Ritirata",rejected:"Rifiutata"};
+const coordinates=[46.43,11.25];
+const tileUrl="https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+let profile=null, page="explore", plan="scheduled", archive="created", mapView=true;
+let filters=new URLSearchParams();
+let nearby=null, filterVersion=0;
+let loadId=0,detailId=0,quiet=0, refreshTimer,walkSignature="";
+let map,markers,meetingMap,meetingMarker,place,editing,summary,joinTarget,reportTarget;
+let addressId=0;
 
-const accounts = setupAccounts({ openProfile, showApp, closeApp, currentPushEndpoint });
-const api = accounts.api;
-const notifications = setupNotifications(api);
+const accounts=setupAccounts({
+  openProfile:known=>people.openDog(null,true,known?.owner??""),
+  showApp,closeApp,currentPushEndpoint,announce,
+});
+const api=accounts.api;
+const people=setupPeople({
+  api,current:()=>profile,setProfile:accounts.setProfile,
+  saveFirst:async data=>(await api("/api/profile",{data})).profile,
+  openReport,connectionsChanged:()=>{if(page==="explore")void loadPage(true);},
+});
+const chat=setupChat(api,openReport);
+const notifications=setupNotifications(api,{
+  openItem: item=>item.kind==="join"||item.kind==="withdrawn" ? navigate("plans",{plan:"received"}) : openDetails(item.walk_id,item.kind==="chat"),
+  preferences:()=>profile?.push_muted??[],
+  setPreferences:muted=>{if(profile)profile.push_muted=muted;},
+});
 
-function announce(message) {
-  const toast = byId("toast");
-  toast.textContent = message;
-  toast.classList.add("show");
-  clearTimeout(announce.timeout);
-  announce.timeout = setTimeout(() => toast.classList.remove("show"), 2800);
-}
-
-function openProfile(profile) {
-  profileForm.reset();
-  for (const field of ["owner", "dog", "breed", "birth", "size", "energy", "emoji"]) {
-    if (profile) profileForm.elements[field].value = profile[field];
-  }
-  profileDialog.showModal();
-}
-
-function showApp(profile) {
-  currentProfile = profile;
-  byId("myEmoji").textContent = profile.emoji;
-  byId("myDog").textContent = profile.dog;
-  byId("myDetails").textContent = profile.breed + " · " + profile.size.toLowerCase();
-  byId("editProfile").textContent = "Modifica profilo";
-  app.hidden = false;
-  if (!map && window.L) {
-    map = window.L.map("map", { zoomControl: false }).setView([46.45, 11.25], 9);
-    window.L.control.zoom({ position: "topright" }).addTo(map);
-    window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "© OpenStreetMap",
-    }).addTo(map);
-    markers = window.L.layerGroup().addTo(map);
-  }
-  map?.invalidateSize();
-  void loadWalks();
-  const url = new URL(window.location.href);
-  if (url.searchParams.get("avvisi") === "1") {
+function showApp(data,username) {
+  const first=!profile;
+  profile=data;
+  app.hidden=false;
+  byId("currentUser").textContent="@"+username;
+  if (first) navigate("explore",{focus:false});
+  else if (page==="profile") people.renderProfile();
+  const url=new URL(location.href);
+  if (url.searchParams.get("avvisi")==="1") {
     url.searchParams.delete("avvisi");
-    history.replaceState(history.state, "", url);
+    history.replaceState(history.state,"",url);
     notifications.open();
   }
 }
 
 function closeApp() {
-  currentProfile = null;
-  loadId += 1;
-  app.hidden = true;
-  for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
+  profile=null;
+  app.hidden=true;
+  loadId+=1;
+  detailId+=1;
+  clearTimeout(refreshTimer);
+  for(const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
+  people.reset();
   notifications.reset();
-  clearInterval(chatTimer);
-  selectedWalk = null;
-  walkForm.reset();
-  locationChoice = null;
-  locationMode = "popular";
-  document.querySelectorAll("[data-mode]").forEach(control => {
-    control.classList.toggle("active", control.dataset.mode === "popular");
+  filters=new URLSearchParams();
+  nearby=null;
+  filterVersion+=1;
+  filtersForm.reset();
+  filtersForm.hidden=true;
+  byId("toggleFilters").setAttribute("aria-expanded","false");
+  byId("toggleFilters").textContent="Filtri";
+  walkSignature="";
+  ["walks","plansList","walkDetails","walkSummary"].forEach(id=>byId(id).replaceChildren());
+  status(byId("exploreStatus"));
+  status(byId("plansStatus"));
+  byId("requestBadge").hidden=true;
+  markers?.clearLayers();
+}
+
+function navigate(next,{focus=true,plan:nextPlan}={}) {
+  page=next;
+  if (nextPlan) plan=nextPlan;
+  for(const id of Object.keys(sections)) byId(id+"Page").hidden=id!==page;
+  document.querySelectorAll("[data-page]").forEach(button=>{
+    if(button.dataset.page===page) button.setAttribute("aria-current","page");
+    else button.removeAttribute("aria-current");
   });
-  byId("popularFields").hidden = false;
-  byId("addressFields").hidden = true;
-  byId("addressResult").textContent = "";
-  byId("walks").replaceChildren();
-  byId("requestBox").replaceChildren();
-  byId("count").textContent = "";
-  archiveLoadId += 1;
-  byId("archiveList").replaceChildren();
-  archiveNotice();
-  markers?.clearLayers();
-}
-
-function element(tag, text, className) {
-  const item = document.createElement(tag);
-  item.textContent = text;
-  if (className) item.className = className;
-  return item;
-}
-
-function button(text, action, className = "primary") {
-  const item = element("button", text, className);
-  item.type = "button";
-  item.onclick = action;
-  return item;
-}
-
-function durationLabel(minutes) {
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  return [hours && hours + " h", remainder && remainder + " min"].filter(Boolean).join(" ");
-}
-
-async function loadWalks() {
-  if (!currentProfile || document.hidden) return;
-  const id = ++loadId;
-  try {
-    const data = await api("/api/walks");
-    if (id !== loadId) return;
-    showWalks(data.walks);
-    showRequests(data.requests);
-    notifications.updateUnread(data.unread_notifications);
-  } catch (failure) {
-    if (id === loadId && currentProfile) announce(failure.message);
+  const title=byId("pageHeading");
+  title.textContent=sections[page];
+  if (focus) {
+    title.focus({preventScroll:true});
+    window.scrollTo(0,0);
   }
+  if (next==="profile") people.renderProfile();
+  if (next==="people") void people.refreshConnections();
+  if (next==="explore") updateMapView();
+  if (next==="plans") updatePlanControls();
+  quiet=0;
+  void loadPage(true);
+}
+document.querySelectorAll("[data-page]").forEach(control=>{control.onclick=()=>navigate(control.dataset.page);});
+document.querySelectorAll("[data-close]").forEach(control=>{control.onclick=()=>byId(control.dataset.close).close();});
+
+function renderMap() {
+  if (map || !window.L || !mapView || byId("explorePage").hidden) return;
+  map=window.L.map("map",{zoomControl:false,scrollWheelZoom:false})
+    .setView(coordinates,window.matchMedia("(max-width: 830px)").matches?8:9);
+  window.L.control.zoom({position:"topright"}).addTo(map);
+  window.L.tileLayer(tileUrl,{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+  markers=window.L.layerGroup().addTo(map);
+  walkSignature="";
 }
 
-function showWalks(walks) {
-  const list = byId("walks");
-  list.replaceChildren();
-  markers?.clearLayers();
-  byId("count").textContent = walks.length ? walks.length + " disponibili" : "nessuna per ora";
-  if (!walks.length) list.append(element("div", "Ancora nessuna passeggiata. Crea la prima!", "empty"));
-  for (const walk of walks) {
-    if (markers) {
-      const coordinates = [walk.latitude, walk.longitude];
-      window.L.circle(coordinates, { radius: 500, color: "#08654b", fillOpacity: 0.14 }).addTo(markers);
-      const icon = element("div", walk.emoji, "map-dog");
-      const popup = element("p", walk.title + " · " + walk.area_label);
-      window.L.marker(coordinates, {
-        icon: window.L.divIcon({ className: "", html: icon, iconSize: [35, 35], iconAnchor: [17, 17] }),
-      }).addTo(markers).bindPopup(popup);
-    }
-    const card = element("article", "", "card");
-    card.append(
-      element("h3", walk.title),
-      element("p", walk.dog_name + " " + walk.emoji + " · " + walk.breed + " · taglia " + walk.size.toLowerCase()),
-      element("p", "📅 " + walk.day + " · " + walk.time + " · " + durationLabel(walk.duration_minutes)),
-      element("p", "Fino a " + walk.max_participants + " amico/i"),
-      element("p", "📍 " + walk.area_label + (walk.reveal_exact ? " · luogo sbloccato" : "")),
-    );
-    const actions = element("footer", "");
-    actions.append(element("span", walk.city, "status"));
-    if (walk.is_host) {
-      actions.append(button("Annulla", () => {
-        if (confirm("Annullare questa passeggiata?")) return act("/api/cancel", { walk_id: walk.id }, "Passeggiata annullata");
-      }, "cancel"));
-    } else if (walk.request_status === "accepted") {
-      actions.append(button("Apri chat", () => openChat(walk.id)));
-    } else if (walk.request_status === "pending") {
-      actions.append(element("span", "Richiesta inviata", "status"));
-    } else {
-      actions.append(button("Chiedi di unirti", () => act("/api/join", { walk_id: walk.id }, "Richiesta inviata")));
-    }
-    card.append(actions);
-    list.append(card);
-  }
+function updateMapView() {
+  const navigable=window.L || document.readyState!=="complete";
+  byId("mapView").disabled=!navigable;
+  const show=mapView && navigable;
+  byId("mapPanel").hidden=!show;
+  byId("mapView").setAttribute("aria-pressed",String(Boolean(show)));
+  byId("listView").setAttribute("aria-pressed",String(!show));
+  renderMap();
+  map?.invalidateSize({pan:false});
 }
+byId("mapView").onclick=()=>{mapView=true;updateMapView();void loadPage(true);};
+byId("listView").onclick=()=>{mapView=false;updateMapView();};
+window.addEventListener("load",()=>{if(profile && page==="explore"){updateMapView();void loadPage(true);}});
 
-function showRequests(requests) {
-  const list = byId("requestBox");
-  list.replaceChildren(element("strong", "Richieste ricevute"));
-  if (!requests.length) list.append(element("p", "Qui compariranno le richieste per le tue passeggiate.", "muted"));
-  for (const request of requests) {
-    const row = element("div", "", "request");
-    const data = { walk_id: request.walk_id, request_id: request.id };
-    row.append(element("b", request.dog_name + " " + request.emoji), element("p", request.title, "muted"));
-    if (request.status === "pending") {
-      row.append(button("Accetta", () => act("/api/requests/action", data, "Richiesta accettata"), "outline"));
-    } else {
-      row.append(button("Chat", () => openChat(request.walk_id), "outline"));
-      if (request.details_released) row.append(element("span", " Indirizzo inviato", "muted"));
-      else row.append(button("Invia indirizzo", () => {
-        if (confirm("Inviare l’indirizzo completo al partecipante?")) return act("/api/reveal", data, "Indirizzo inviato");
-      }, "outline"));
-    }
-    list.append(row);
-  }
-}
-
-async function act(path, data, success) {
-  try {
-    await api(path, { data });
-    announce(success);
-    await loadWalks();
-  } catch (failure) {
-    announce(failure.message);
-  }
-}
-
-function archiveNotice(message = "") {
-  const status = byId("archiveNotice");
-  status.textContent = message;
-  status.hidden = !message;
-}
-
-function renderArchive(walks) {
-  const list = byId("archiveList");
-  if (!walks.length) {
-    list.replaceChildren(element("p", "Nessuna passeggiata in questo filtro.", "empty"));
-    return;
-  }
-  list.replaceChildren(...walks.map(walk => {
-    const card = element("article", "", "card archive-card");
-    card.append(element("h3", walk.title),
-      element("p", walk.dog_name + " " + walk.emoji + " · " + walk.city),
-      element("p", walk.day + " · " + walk.time + " · " + durationLabel(walk.duration_minutes)));
-    const actions = element("footer", "");
-    const status = walk.status === "cancelled" ? "Annullata"
-      : archiveFilter === "requests" ? "Non accettata" : "Conclusa";
-    actions.append(element("span", status, "status"));
-    if (walk.can_chat) actions.append(button("Apri chat", () => openChat(walk.id, true), "primary"));
-    if (walk.is_host) actions.append(button("Elimina definitivamente", () => deleteArchivedWalk(walk), "cancel archive-delete"));
-    card.append(actions);
-    return card;
-  }));
-}
-
-async function loadArchive() {
-  if (!currentProfile || !archive.open || document.hidden) return;
-  const load = ++archiveLoadId;
-  try {
-    const { walks } = await api("/api/walks/archive?filter=" + encodeURIComponent(archiveFilter));
-    if (load === archiveLoadId && archive.open) renderArchive(walks);
-  } catch (failure) {
-    if (load === archiveLoadId && archive.open) archiveNotice(failure.message);
-  }
-}
-
-function selectArchive(filter) {
-  archiveFilter = filter;
-  archiveFilters.forEach(item => item.setAttribute("aria-pressed", String(item.dataset.archiveFilter === filter)));
-  byId("archiveList").replaceChildren(element("p", "Caricamento…", "muted"));
-  archiveNotice();
-  void loadArchive();
-}
-
-byId("openArchive").onclick = () => {
-  archive.showModal();
-  selectArchive("created");
+byId("toggleFilters").onclick=()=>{
+  filtersForm.hidden=!filtersForm.hidden;
+  byId("toggleFilters").setAttribute("aria-expanded",String(!filtersForm.hidden));
 };
-archiveFilters.forEach(item => { item.onclick = () => selectArchive(item.dataset.archiveFilter); });
-
-async function deleteArchivedWalk(walk) {
-  if (!confirm("Eliminare definitivamente «" + walk.title + "»? La passeggiata, le richieste e la chat spariranno anche per gli altri partecipanti.")) return;
-  try {
-    await api("/api/walks/delete", { data: { walk_id: walk.id } });
-    archiveNotice("Passeggiata eliminata definitivamente.");
-    await loadArchive();
-  } catch (failure) {
-    archiveNotice(failure.message);
-  }
-}
-
-byId("editProfile").onclick = () => openProfile(currentProfile);
-profileForm.onsubmit = async event => {
+filtersForm.onsubmit=event=>{
   event.preventDefault();
-  const submit = event.submitter;
-  submit.disabled = true;
-  try {
-    await accounts.saveProfile(Object.fromEntries(new FormData(profileForm)));
-    profileDialog.close();
-    announce("Profilo salvato sull’account");
-  } catch (failure) {
-    announce(failure.message);
-  } finally {
-    submit.disabled = false;
-  }
+  const version=++filterVersion;
+  const feedback=byId("filterLocationStatus");
+  status(feedback);
+  void busy(event.submitter,async()=>{
+    const data=new FormData(filtersForm);
+    const next=new URLSearchParams();
+    for (const key of ["city","day","before","size"]) {
+      const value=data.get(key).trim();
+      if(value) next.set(key,value);
+    }
+    if (next.has("day") && next.has("before") && next.get("day")>next.get("before")) throw new Error("La data finale dev’essere successiva o uguale alla data iniziale.");
+    for (const key of ["friends","full"]) if(data.has(key))next.set(key,"1");
+    const radius=Number(data.get("distance"));
+    let around=null;
+    if (radius) {
+      if (!navigator.geolocation) throw new Error("Posizione non disponibile su questo dispositivo.");
+      const position=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,
+        {maximumAge:120000,timeout:8000})).catch(()=>{throw new Error("Posizione non disponibile. Consenti l’accesso o togli il filtro distanza.");});
+      around={ latitude:position.coords.latitude,longitude:position.coords.longitude,radius };
+    }
+    if (version!==filterVersion || !profile) return;
+    filters=next;
+    nearby=around;
+    filtersForm.hidden=true;
+    byId("toggleFilters").setAttribute("aria-expanded","false");
+    const count=filters.size+Number(Boolean(nearby));
+    byId("toggleFilters").textContent=count?"Filtri ("+count+")":"Filtri";
+    void loadPage(true);
+  },failure=>{if(version===filterVersion)status(feedback,failure.message);});
+};
+filtersForm.onreset=()=>{
+  filterVersion+=1;
+  filters=new URLSearchParams();
+  nearby=null;
+  status(byId("filterLocationStatus"));
+  byId("toggleFilters").textContent="Filtri";
+  void loadPage(true);
 };
 
-document.querySelectorAll("[data-close]").forEach(control => {
-  control.onclick = () => byId(control.dataset.close).close();
+function updatePlanControls() {
+  document.querySelectorAll("[data-plan]").forEach(item=>item.setAttribute("aria-pressed",String(item.dataset.plan===plan)));
+  document.querySelectorAll("[data-archive]").forEach(item=>item.setAttribute("aria-pressed",String(item.dataset.archive===archive)));
+  byId("archiveFilters").hidden=plan!=="archive";
+}
+document.querySelectorAll("[data-plan]").forEach(item=>{item.onclick=()=>{
+  plan=item.dataset.plan;updatePlanControls();byId("plansList").replaceChildren();void loadPage(true);
+};});
+document.querySelectorAll("[data-archive]").forEach(item=>{item.onclick=()=>{
+  archive=item.dataset.archive;updatePlanControls();byId("plansList").replaceChildren();void loadPage(true);
+};});
+
+function isLive(walk) {
+  return walk.status==="open" && walk.ends_at>Date.now()/1000;
+}
+function eventBadge(walk) {
+  if (walk.status==="cancelled") return "Annullata";
+  if (!isLive(walk)) return requestLabels[walk.request_status]??"Conclusa";
+  if (walk.is_host) return "Organizzi tu";
+  return requestLabels[walk.request_status]??slots(walk.available_places);
+}
+
+function walkCard(walk) {
+  const card=element("article","","card");
+  const meta=element("p",schedule(walk),"meta");
+  const description=[walk.city,dogNames(walk.dogs)].filter(Boolean).join(" · ");
+  card.append(element("h3",walk.title),meta,element("p",description,"muted"));
+  const pills=element("div","","row");
+  pills.append(element("span",eventBadge(walk),"pill"));
+  if (isLive(walk) && (walk.is_host || walk.request_status==="pending" || walk.request_status==="accepted")) {
+    pills.append(element("span",slots(walk.available_places),"pill"));
+  }
+  card.append(pills);
+  const controls=row(button("Vedi dettagli",()=>openDetails(walk.id)));
+  if (walk.can_chat) controls.append(button("Apri chat",()=>chat.open(walk)));
+  if (walk.is_host && !isLive(walk)) controls.append(button("Elimina",control=>{
+    if (confirm("Eliminare la passeggiata, le richieste e la chat anche dall’archivio dei partecipanti?")) {
+      return mutate(control,"/api/walks/delete",{walk_id:walk.id},"Passeggiata eliminata.");
+    }
+  },"text-button"));
+  card.append(controls);
+  return card;
+}
+
+function showExplore(events) {
+  const walks=nearby?events.filter(walk=>{
+    const rad=Math.PI/180;
+    const a=Math.sin((walk.latitude-nearby.latitude)*rad/2)**2+
+      Math.cos(walk.latitude*rad)*Math.cos(nearby.latitude*rad)*Math.sin((walk.longitude-nearby.longitude)*rad/2)**2;
+    return 12742*Math.asin(Math.sqrt(Math.min(1,a)))<=nearby.radius;
+  }):events;
+  const signature=JSON.stringify(walks);
+  if (signature===walkSignature && byId("walks").childElementCount) return false;
+  walkSignature=signature;
+  byId("walks").replaceChildren(...(walks.length?walks.map(walkCard):[
+    element("p",filters.size||nearby?"Nessuna passeggiata corrisponde ai filtri.":"Nessuna passeggiata disponibile. Puoi organizzarne una con Crea.","empty"),
+  ]));
+  status(byId("exploreStatus"),walks.length===1?"1 passeggiata":walks.length+" passeggiate");
+  if (!markers) return true;
+  markers.clearLayers();
+  const L=window.L;
+  for(const walk of walks) {
+    const point=[walk.latitude,walk.longitude];
+    if (!point.every(Number.isFinite)) continue;
+    if (!walk.reveal_exact) L.circle(point,{radius:500,color:"#08654b",fillOpacity:.12,interactive:false}).addTo(markers);
+    const icon=element("span",walk.emoji??"🐕","map-dog");
+    const popup=element("div","","map-popup");
+    popup.append(element("strong",walk.title),element("p",schedule(walk)),element("p",slots(walk.available_places)),
+      button("Vedi dettagli",()=>openDetails(walk.id)));
+    L.marker(point,{title:walk.title,alt:walk.title,
+      icon:L.divIcon({className:"map-pin",html:icon,iconSize:[35,35],iconAnchor:[17,17]})}).addTo(markers).bindPopup(popup);
+  }
+  return true;
+}
+
+function requestCard(request) {
+  const card=element("article","","card");
+  card.append(element("h3",request.owner),element("p",request.title,"meta"),element("p",dogNames(request.dogs),"muted"));
+  const actions=row(button("Vedi profilo",()=>people.openPerson(request.profile_id)));
+  const data={walk_id:request.walk_id,request_id:request.id};
+  if (request.status==="pending") {
+    const accept=button("Accetta",control=>mutate(control,"/api/requests/action",data,"Richiesta accettata."),"primary");
+    accept.disabled=request.available_places<request.dogs.length;
+    card.append(element("p",accept.disabled?"Posti insufficienti":slots(request.available_places),"muted"));
+    actions.append(accept,button("Rifiuta",control=>mutate(control,"/api/requests/reject",data,"Richiesta rifiutata.")));
+  } else if (!request.details_released) {
+    actions.append(button("Condividi indirizzo",control=>{
+      if (confirm("Condividere il punto di ritrovo esatto con questa persona?")) {
+        return mutate(control,"/api/reveal",data,"Indirizzo condiviso.");
+      }
+    }));
+  } else card.append(element("p","Indirizzo condiviso","muted"));
+  actions.append(button("Passeggiata",()=>openDetails(request.walk_id)));
+  card.append(actions);
+  return card;
+}
+
+function drawPlans(walks,requests) {
+  const root=byId("plansList");
+  const list=plan==="received"?requests.map(requestCard):
+    walks.filter(walk=>plan==="archive" || (plan==="sent"?Boolean(walk.request_status):walk.is_host||walk.request_status==="accepted")).map(walkCard);
+  root.replaceChildren(...(list.length?list:[element("p","Nessuna passeggiata in questa sezione.","empty")]));
+  status(byId("plansStatus"));
+}
+
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  if (profile && !document.hidden) refreshTimer=setTimeout(()=>void loadPage(),quiet>=2?75000:40000);
+}
+
+async function loadPage(force=false) {
+  clearTimeout(refreshTimer);
+  if (!profile || document.hidden) return;
+  const id=++loadId;
+  const current=page, currentPlan=plan;
+  const endpoint=current==="explore"?"/api/walks?"+filters:current==="plans"?
+    currentPlan==="archive"?"/api/walks/archive?filter="+archive:"/api/walks?view=mine":"/api/notifications?count=1";
+  if (force && current==="plans") status(byId("plansStatus"),"Caricamento…");
+  try {
+    const result=await api(endpoint);
+    if (id!==loadId) return;
+    const unread=result.unread_notifications??result.unread;
+    notifications.updateUnread(unread);
+    if (result.requests) {
+      const pending=result.requests.filter(item=>item.status==="pending").length;
+      byId("requestBadge").textContent=String(pending);
+      byId("requestBadge").hidden=pending===0;
+    }
+    if (current==="explore") {
+      if (showExplore(result.walks)) quiet=0; else quiet+=1;
+    } else if (current==="plans" && currentPlan===plan) {
+      const signature=JSON.stringify([plan,archive,result.walks,result.requests]);
+      if (force || byId("plansList").dataset.signature!==signature) {
+        drawPlans(result.walks,result.requests??[]);
+        byId("plansList").dataset.signature=signature;
+        quiet=0;
+      } else quiet+=1;
+    } else quiet+=1;
+  } catch (failure) {
+    if (id!==loadId) return;
+    if (current==="plans") status(byId("plansStatus"),failure.message);
+    else if (current==="explore") status(byId("exploreStatus"),failure.message);
+  } finally { if (id===loadId) scheduleRefresh(); }
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden) clearTimeout(refreshTimer);
+  else void loadPage();
 });
 
-byId("openWalk").onclick = () => walkDialog.showModal();
-document.querySelectorAll("[data-mode]").forEach(control => {
-  control.onclick = () => {
-    locationMode = control.dataset.mode;
-    document.querySelectorAll("[data-mode]").forEach(option => option.classList.toggle("active", option === control));
-    byId("popularFields").hidden = locationMode !== "popular";
-    byId("addressFields").hidden = locationMode !== "address";
-  };
-});
-
-walkForm.elements.address.oninput = () => {
-  locationChoice = null;
-  byId("addressResult").textContent = "";
-};
-byId("findAddress").onclick = async () => {
-  const address = walkForm.elements.address.value.trim();
-  if (!address) return announce("Inserisci un indirizzo");
-  const result = byId("addressResult");
-  result.textContent = "Ricerca in corso…";
-  const query = new URLSearchParams({ format: "jsonv2", limit: "1", countrycodes: "it", q: address });
-  try {
-    const response = await fetch("https://nominatim.openstreetmap.org/search?" + query);
-    const [place] = await response.json();
-    if (!place) throw new Error("Not found");
-    if (walkForm.elements.address.value.trim() !== address) return;
-    locationChoice = { area_label: place.display_name, latitude: Number(place.lat), longitude: Number(place.lon) };
-    result.textContent = "Trovato: " + locationChoice.area_label;
-  } catch {
-    result.textContent = "Indirizzo non trovato. Prova con città e numero civico.";
-  }
-};
-
-walkForm.onsubmit = async event => {
-  event.preventDefault();
-  const { title, city, day, time, max, popular, duration_minutes } = Object.fromEntries(new FormData(walkForm));
-  let coordinates = locationChoice;
-  if (locationMode === "popular") {
-    const [area_label, latitude, longitude] = popular.split("|");
-    coordinates = { area_label, latitude: Number(latitude), longitude: Number(longitude) };
-  }
-  if (!coordinates) return announce("Cerca prima l’indirizzo");
-  const submit = event.submitter;
-  submit.disabled = true;
-  try {
-    await api("/api/walk", { data: { title, city, day, time, max: Number(max), duration_minutes: Number(duration_minutes), ...coordinates } });
-    walkDialog.close();
-    walkForm.reset();
-    locationChoice = null;
-    byId("addressResult").textContent = "";
-    announce("Passeggiata pubblicata");
-    await loadWalks();
-  } catch (failure) {
-    announce(failure.message);
-  } finally {
-    submit.disabled = false;
-  }
-};
-
-const chat = byId("chatDialog");
-const chatForm = byId("chatForm");
-const chatMessages = byId("chatMessages");
-function setChatReadOnly(readOnly) {
-  chatForm.hidden = readOnly;
-  byId("chatArchived").hidden = !readOnly;
+function mutate(control,endpoint,data,message,after) {
+  return busy(control,async()=>{
+    await api(endpoint,{data});
+    announce(message);
+    await after?.();
+    await loadPage(true);
+  });
 }
 
-function openChat(walkId, archived = false) {
-  selectedWalk = walkId;
-  chatMessages.replaceChildren();
-  chatForm.reset();
-  setChatReadOnly(archived);
-  chat.showModal();
-  void refreshChat();
-  chatTimer = setInterval(refreshChat, 8000);
-}
-
-chat.onclose = () => {
-  clearInterval(chatTimer);
-  selectedWalk = null;
-  chatMessages.replaceChildren();
-};
-
-async function refreshChat() {
-  const walk = selectedWalk;
-  if (!walk || !currentProfile || document.hidden) return;
+async function openDetails(id,openChat=false) {
+  if (!id || !profile) return;
+  const token=++detailId;
+  if (!detailsDialog.open) detailsDialog.showModal();
+  byId("detailHeading").textContent="Passeggiata";
+  const body=byId("walkDetails");
+  body.replaceChildren(element("p","Caricamento…","muted"));
   try {
-    const { messages, read_only } = await api("/api/messages?walk_id=" + encodeURIComponent(walk));
-    if (!chat.open || selectedWalk !== walk) return;
-    setChatReadOnly(read_only);
-    const nodes = messages.map(message => {
-      const row = element("p", "");
-      row.append(element("b", message.emoji + " " + message.dog_name), document.createElement("br"), document.createTextNode(message.body));
-      return row;
-    });
-    chatMessages.replaceChildren(...(nodes.length ? nodes : [element("p", "Nessun messaggio ancora.", "muted")]));
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  } catch (failure) {
-    if (!chat.open || selectedWalk !== walk) return;
-    if (failure.status === 403) {
-      chat.close();
-      if (archive.open) {
-        archiveNotice(failure.message);
-        void loadArchive();
-      } else {
-        announce(failure.message);
-        void loadWalks();
+    const {walk,participants}=await api("/api/walks/details?id="+encodeURIComponent(id));
+    if (token!==detailId || !detailsDialog.open) return;
+    byId("detailHeading").textContent=walk.title;
+    const known=walk.is_host || walk.request_status==="accepted";
+    const live=isLive(walk);
+    if (openChat && known && walk.status==="open") {
+      detailsDialog.close();
+      chat.open(walk);
+      return;
+    }
+    body.replaceChildren(element("p",schedule(walk),"meta"),element("p",walk.area_label,"muted"),
+      element("p",live?slots(walk.available_places)+" · Capienza "+walk.max_participants+" cani":eventBadge(walk),"muted"));
+    if (walk.description) body.append(element("p",walk.description,"card-description"));
+    if (participants.length) {
+      body.append(element("h3","Partecipanti"));
+      for(const item of participants) {
+        const participant=element("article","","card");
+        participant.append(element("h3",item.owner+(item.host?" · Organizza": "")),
+          element("p",dogNames(item.dogs),"muted"));
+        if (item.profile_id!==profile.id) participant.append(row(button("Vedi profilo",()=>people.openPerson(item.profile_id))));
+        body.append(participant);
       }
     } else {
-      announce(failure.message);
+      body.append(row(button("Profilo di "+walk.host_name,()=>people.openPerson(walk.host_profile_id))));
     }
+    const actions=row();
+    if (known && walk.status==="open") actions.append(button("Apri chat",()=>chat.open(walk)));
+    if (walk.is_host && live) {
+      if (walk.starts_at>Date.now()/1000) actions.append(button("Modifica",()=>openWalkForm(walk),"primary"));
+      actions.append(button("Annulla passeggiata",control=>{
+        if(confirm("Annullare questa passeggiata e avvisare i partecipanti?"))return mutate(control,"/api/cancel",
+          {walk_id:id},"Passeggiata annullata.",()=>detailsDialog.close());
+      },"danger"));
+    } else if (live && ["pending","accepted"].includes(walk.request_status)) {
+      actions.append(button(walk.request_status==="pending"?"Ritira richiesta":"Rinuncia",control=>{
+        if(confirm("Ritirare la partecipazione a questa passeggiata?"))return mutate(control,"/api/requests/withdraw",
+          {walk_id:id},"Partecipazione ritirata.",()=>openDetails(id));
+      }));
+    } else if (live && walk.available_places>0 && walk.request_status!=="rejected") {
+      actions.append(button("Chiedi di unirti",()=>openJoin(walk),"primary"));
+    }
+    if (!walk.is_host) actions.append(button("Segnala",()=>openReport("walk",id),"text-button"));
+    if (actions.childElementCount) body.append(actions);
+  } catch (failure) {
+    if (token===detailId && detailsDialog.open) body.replaceChildren(element("p",failure.message,"form-error"));
   }
 }
 
-chatForm.onsubmit = async event => {
+function openJoin(walk) {
+  joinTarget=walk;
+  const dogs=profile.dogs;
+  dogChoices(byId("joinDogs"),dogs,dogs.length===1?[dogs[0].id]:[]);
+  byId("joinCapacity").textContent=slots(walk.available_places);
+  status(joinForm.querySelector(".form-error"));
+  byId("joinDialog").showModal();
+}
+joinForm.onsubmit=event=>{
   event.preventDefault();
-  const message = chatForm.elements.message.value.trim();
-  if (!message || !selectedWalk) return;
-  const submit = event.submitter;
-  submit.disabled = true;
-  try {
-    await api("/api/messages", { data: { walk_id: selectedWalk, text: message } });
-    chatForm.reset();
-    await refreshChat();
-  } catch (failure) {
-    announce(failure.message);
-  } finally {
-    submit.disabled = false;
-  }
+  const message=joinForm.querySelector(".form-error");
+  status(message);
+  const dog_ids=new FormData(joinForm).getAll("dog_ids");
+  const current=joinTarget;
+  if (!dog_ids.length) return status(message,"Scegli almeno un cane.");
+  if (dog_ids.length>current.available_places) return status(message,"I cani selezionati superano i posti disponibili.");
+  void busy(event.submitter,async()=>{
+    await api("/api/join",{data:{walk_id:current.id,dog_ids}});
+    byId("joinDialog").close();
+    announce("Richiesta inviata.");
+    await openDetails(current.id);
+    await loadPage(true);
+  },failure=>status(message,failure.message));
 };
 
-function refreshHome() {
-  void loadWalks();
-  if (archive.open && !chat.open) void loadArchive();
+function localDay() {
+  return new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Rome",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 }
+function openWalkForm(walk=null) {
+  editing=walk;
+  summary=null;
+  addressId+=1;
+  walkForm.reset();
+  walkForm.elements.day.min=localDay();
+  walkForm.elements.day.value=localDay();
+  const dogs=profile.dogs;
+  dogChoices(byId("hostDogs"),dogs,walk?walk.dogs.map(dog=>dog.id):[dogs[0].id]);
+  if (walk) {
+    fill(walkForm,{...walk,max:walk.max_participants,address:walk.exact_area},["title","day","time","duration_minutes","max","description","address"]);
+  }
+  byId("walkHeading").textContent=walk?"Modifica passeggiata":"Crea una passeggiata";
+  status(walkForm.querySelector(".form-error"));
+  byId("walkDialog").showModal();
+  showPlace(walk?{area_label:walk.exact_area,city:walk.city,latitude:walk.latitude,longitude:walk.longitude}:null);
+}
+byId("openWalk").onclick=()=>openWalkForm();
+function showPlace(point) {
+  place=point;
+  status(byId("addressResult"),point?point.area_label+" · "+point.city:"");
+  const box=byId("meetingMap");
+  box.hidden=!point || !window.L;
+  if (box.hidden) return;
+  const L=window.L;
+  if (!meetingMap) {
+    meetingMap=L.map(box,{scrollWheelZoom:false,dragging:false}).setView([point.latitude,point.longitude],15);
+    L.tileLayer(tileUrl,{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(meetingMap);
+  }
+  const center=[point.latitude,point.longitude];
+  meetingMarker?.remove();
+  meetingMarker=L.circleMarker(center,{radius:8,color:"#075b43",fillOpacity:.8}).addTo(meetingMap);
+  meetingMap.invalidateSize({pan:false});
+  meetingMap.setView(center,15);
+}
+walkForm.elements.popular.onchange=()=>{
+  addressId+=1;
+  const input=walkForm.elements.popular.value;
+  if(!input) return showPlace(null);
+  const [area_label,city,latitude,longitude]=input.split("|");
+  walkForm.elements.address.value="";
+  showPlace({area_label,city,latitude:Number(latitude),longitude:Number(longitude)});
+};
+walkForm.elements.address.oninput=()=>{
+  addressId+=1;
+  walkForm.elements.popular.value="";
+  showPlace(null);
+};
+byId("findAddress").onclick=control=>void busy(control.currentTarget,async()=>{
+  const query=walkForm.elements.address.value.trim();
+  const request=++addressId;
+  if(!query) throw new Error("Inserisci un luogo o un indirizzo.");
+  status(byId("addressResult"),"Ricerca in corso…");
+  const params=new URLSearchParams({format:"jsonv2",limit:"1",countrycodes:"it",addressdetails:"1",q:query});
+  const response=await fetch("https://nominatim.openstreetmap.org/search?"+params,{signal:AbortSignal.timeout(12000)});
+  const [found]=response.ok?await response.json():[];
+  if (request!==addressId || !byId("walkDialog").open) return;
+  if (!found) throw new Error("Indirizzo non trovato. Prova ad aggiungere il comune.");
+  const address=found.address??{};
+  const city=address.city??address.town??address.village??address.municipality;
+  if(!city) throw new Error("Comune non trovato. Inseriscilo nella ricerca.");
+  walkForm.elements.popular.value="";
+  showPlace({area_label:found.display_name.slice(0,140),city:city.slice(0,40),latitude:Number(found.lat),longitude:Number(found.lon)});
+},failure=>{status(byId("addressResult"),failure.message);});
 
-setInterval(refreshHome, 20000);
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) return;
-  refreshHome();
-  if (chat.open) void refreshChat();
-});
+walkForm.onsubmit=event=>{
+  event.preventDefault();
+  const data=new FormData(walkForm);
+  const dog_ids=data.getAll("dog_ids");
+  const message=walkForm.querySelector(".form-error");
+  if(!dog_ids.length) return status(message,"Seleziona almeno un cane.");
+  if(Number(data.get("max"))<dog_ids.length) return status(message,"La capienza deve includere tutti i tuoi cani selezionati.");
+  if(!place) return status(message,"Scegli un luogo suggerito o conferma un indirizzo.");
+  status(message);
+  summary={
+    title:data.get("title"),day:data.get("day"),time:data.get("time"),
+    duration_minutes:Number(data.get("duration_minutes")),max:Number(data.get("max")),
+    description:data.get("description"),dog_ids,...place,
+    ...(editing?{walk_id:editing.id,revision:editing.revision}:{}),
+  };
+  byId("walkSummary").replaceChildren(element("h3",summary.title),element("p",schedule(summary),"meta"),
+    element("p",summary.area_label+" · "+summary.city),element("p","Capienza totale: "+summary.max+" cani"),
+    element("p","Porti: "+dogNames(profile.dogs.filter(dog=>dog_ids.includes(dog.id)))));
+  byId("confirmWalk").textContent=editing?"Salva modifiche":"Pubblica";
+  status(byId("summaryError"));
+  summaryDialog.showModal();
+};
+byId("confirmWalk").onclick=event=>void busy(event.currentTarget,async()=>{
+  const edited=Boolean(editing);
+  const {id}=await api(edited?"/api/walks/edit":"/api/walk",{data:summary});
+  summaryDialog.close();
+  byId("walkDialog").close();
+  announce(edited?"Passeggiata aggiornata.":"Passeggiata pubblicata.");
+  if (detailsDialog.open) await openDetails(id);
+  else navigate("plans",{plan:"scheduled"});
+  await loadPage(true);
+},failure=>status(byId("summaryError"),failure.message));
+
+const reportForm=byId("reportForm");
+function openReport(kind,id) {
+  reportTarget={kind,id};
+  reportForm.reset();
+  status(reportForm.querySelector(".form-error"));
+  byId("reportDialog").showModal();
+}
+reportForm.onsubmit=event=>{
+  event.preventDefault();
+  void busy(event.submitter,async()=>{
+    await api("/api/reports",{data:{...reportTarget,reason:reportForm.elements.reason.value}});
+    byId("reportDialog").close();
+    announce("Segnalazione registrata.");
+  },failure=>status(reportForm.querySelector(".form-error"),failure.message));
+};
+
 void accounts.restore();

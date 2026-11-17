@@ -4,7 +4,7 @@ App per organizzare passeggiate tra cani in Trentino-Alto Adige. Il sito è pens
 
 ## Pubblicazione
 
-L'interfaccia statica vive in `docs/` e viene pubblicata da GitHub Pages dal ramo `main`. Le API in `worker.mjs` e `accounts.mjs` usano Cloudflare Workers e D1.
+L'interfaccia statica vive in `docs/` e viene pubblicata da GitHub Pages dal ramo `main`. Le API usano Cloudflare Workers e D1.
 
 1. Accedi a Cloudflare con Wrangler e crea un database: `npx wrangler d1 create appcani`.
 2. Copia `wrangler.example.toml` in `wrangler.toml` e inserisci l'ID del nuovo database. Per un dominio personalizzato aggiorna anche `PAGES_ORIGIN`.
@@ -15,7 +15,11 @@ L'interfaccia statica vive in `docs/` e viene pubblicata da GitHub Pages dal ram
 
 Modifica la struttura in `layout.mjs` o `account-layout.html`, poi rigenera `docs/index.html` con `node build.mjs`. Esegui il test di integrazione con `node --test tests/accounts.test.mjs` su Node.js 24.
 
-Ogni account ha un profilo del cane. Accedendo con lo stesso nome utente su un altro dispositivo si ritrovano il profilo, le passeggiate, le richieste e le chat. L'API mostra una zona approssimativa. L'organizzatore può condividere l'indirizzo esatto dopo l'accettazione di una richiesta.
+Ogni account ha un profilo proprietario e può gestire fino a 12 cani. Ogni foto viene ridimensionata e conservata in D1 come JPEG, fino a 80 KB. Le passeggiate contano i cani dell’organizzatore e quelli già confermati. L'API mostra una zona approssimativa. L'organizzatore può condividere il luogo esatto dopo l'accettazione e deve condividerlo di nuovo se lo modifica.
+
+La migrazione `0005_owners_and_walks.sql` crea il primo cane a partire dai profili esistenti, converte la capienza da numero di ospiti a numero totale di cani e conserva richieste, avvisi e cronologia. Le segnalazioni sono disponibili nella tabella `reports` del database. Il recupero account usa codici monouso generati dalle impostazioni.
+
+Le passkey richiedono la migrazione `0006_passkeys.sql`. Vengono registrate per l'host indicato in `PAGES_ORIGIN`. I moduli WebAuthn distribuiti sono inclusi nel repository con le relative licenze. Per rigenerarli, esegui `npm ci` e `npm run build:webauthn`.
 
 ## Notifiche
 

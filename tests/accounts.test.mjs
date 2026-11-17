@@ -11,7 +11,7 @@ const origin = "https://gabriholler98.github.io";
 
 function database() {
   const sqlite = new DatabaseSync(":memory:");
-  for (const migration of ["0000_shared_walks", "0001_chat_and_reveal", "0002_accounts", "0003_walk_archive", "0004_notifications"]) {
+  for (const migration of ["0000_shared_walks", "0001_chat_and_reveal", "0002_accounts", "0003_walk_archive", "0004_notifications", "0005_owners_and_walks", "0006_passkeys"]) {
     sqlite.exec(readFileSync(new URL("../drizzle/" + migration + ".sql", import.meta.url), "utf8"));
   }
   const db = {
@@ -43,8 +43,7 @@ function database() {
   return { sqlite, db };
 }
 
-test("account required, data follows the account and chat stays private", async () => {
-  const { sqlite, db } = database();
+function makeApi(db) {
   const env = { DB: db, LOCATION_MASK_KEY: "test-location", PASSWORD_PEPPER: "test-pepper", PAGES_ORIGIN: origin };
   async function call(path, { method, token, data, status = 200, source = origin } = {}) {
     const headers = { Origin: source, "CF-Connecting-IP": "192.0.2.51" };
@@ -57,6 +56,12 @@ test("account required, data follows the account and chat stays private", async 
     assert.equal(response.status, status, JSON.stringify(body));
     return body;
   }
+  return {env,call};
+}
+
+test("account required, data follows the account and chat stays private", async () => {
+  const { sqlite, db } = database();
+  const { env,call } = makeApi(db);
 
   const profile = { dog: "Luna", owner: "Marta", breed: "Mix", size: "Media", energy: "Media", emoji: "🐕", birth: 2020 };
   const username = "walker.one";
@@ -138,7 +143,9 @@ test("account required, data follows the account and chat stays private", async 
   const data = { walk_id: walk.id, request_id: pending.id };
   await call("requests/action", { token: guest, data, status: 409 });
   await call("requests/action", { token: secondDevice, data });
-  assert.equal((await call("walks", { token: guest })).walks[0].reveal_exact, false);
+  assert.deepEqual((await call("walks", { token: guest })).walks, []);
+  assert.equal((await call("walks?full=1", { token: guest })).walks[0].available_places, 0);
+  assert.equal((await call("walks?view=mine", { token: guest })).walks[0].reveal_exact, false);
   await call("messages", { token: guest, data: { walk_id: walk.id, text: "Ciao!" }, status: 201 });
   assert.equal((await call("messages?walk_id=" + walk.id, { token: secondDevice })).messages[0].body, "Ciao!");
   assert.equal((await call("notifications", { token: guest })).items[0].kind, "accepted");
@@ -146,13 +153,13 @@ test("account required, data follows the account and chat stays private", async 
   await call("messages", { token: guest, data: { walk_id: walk.id, text: "Ci vediamo." }, status: 201 });
   assert.equal((await call("notifications", { token: secondDevice })).unread, 1);
   await call("reveal", { token: host, data });
-  assert.equal((await call("walks", { token: guest })).walks[0].area_label, "Punto di ritrovo");
+  assert.equal((await call("walks?view=mine", { token: guest })).walks[0].area_label, "Punto di ritrovo");
   const waitingName = "walker.three";
   const { token: waiting } = await call("auth/register", {
     data: { username: waitingName, proof: await passwordProof(waitingName, "another-password") }, status: 201,
   });
   await call("profile", { token: waiting, data: { ...profile, dog: "Tito" } });
-  await call("join", { token: waiting, data: { walk_id: walk.id }, status: 201 });
+  await call("join", { token: waiting, data: { walk_id: walk.id }, status: 409 });
   await call("walks/delete", { token: host, data, status: 403 });
   sqlite.prepare("UPDATE walks SET ends_at = ? WHERE id = ?").run(Math.floor(Date.now() / 1000), walk.id);
   assert.deepEqual((await call("walks", { token: guest })).walks, []);
@@ -163,7 +170,7 @@ test("account required, data follows the account and chat stays private", async 
   const archivedByGuest = (await call("walks/archive?filter=attended", { token: guest })).walks;
   assert.equal(archivedByGuest[0].id, walk.id);
   assert.ok(!("area_label" in archivedByGuest[0]));
-  assert.equal((await call("walks/archive?filter=requests", { token: waiting })).walks[0].request_status, "pending");
+  assert.deepEqual((await call("walks/archive?filter=requests", { token: waiting })).walks, []);
   assert.deepEqual((await call("walks/archive?filter=attended", { token: waiting })).walks, []);
   assert.equal((await call("messages?walk_id=" + walk.id, { token: guest })).read_only, true);
   await call("messages", { token: guest, data: { walk_id: walk.id, text: "A presto" }, status: 403 });
@@ -188,6 +195,91 @@ test("account required, data follows the account and chat stays private", async 
   await call("auth/me", { token: guest, source: "https://untrusted.invalid", status: 403 });
   for (let i = 0; i < 6; i += 1) await call("auth/login", { data: { username, proof: "0".repeat(64) }, status: 401 });
   await call("auth/login", { data: { username, proof }, status: 429 });
+  sqlite.close();
+});
+
+test("multiple dogs, available seats, edits, friends, privacy and account recovery", async () => {
+  const {sqlite,db}=database();
+  const {call}=makeApi(db);
+  const password="una-frase-di-test";
+  async function register(username,owner,dog) {
+    const proof=await passwordProof(username,password);
+    const {token}=await call("auth/register",{data:{username,proof},status:201});
+    const {profile}=await call("profile",{token,data:{owner,firstDog:{name:dog,breed:"Meticcio",birth:2022,size:"Media",energy:"Media"}}});
+    return {token,id:profile.id,dog:profile.dogs[0].id,proof};
+  }
+  const host=await register("audit.host","Anna","Argo");
+  const guest=await register("audit.guest","Bruno","Luna");
+  const waiting=await register("audit.waiting","Carla","Milo");
+  const {profile}=await call("profile/dogs",{token:guest.token,data:{name:"Lola",breed:"Meticcio",birth:2020,size:"Piccola",energy:"Alta",notes:"Preferisce spazi aperti"}});
+  const second=profile.dogs.find(dog=>dog.id!==guest.dog);
+  assert.equal(profile.dogs.length,2);
+  await call("profile/owner",{token:guest.token,data:{owner:"Bruno",age_group:"25–34",gender:"Uomo",visibility:"friends"}});
+  assert.equal((await call("people?q=Lol",{token:host.token})).dogs[0].profile_id,guest.id);
+  assert.equal((await call("people/profile?id="+guest.id,{token:host.token})).profile.age_group,"");
+  await call("people/relationship",{token:guest.token,data:{target_id:host.id,action:"request"}});
+  assert.equal((await call("people/connections",{token:host.token})).relationships[0].sender_id,guest.id);
+  await call("people/relationship",{token:host.token,data:{target_id:guest.id,action:"accept"}});
+  assert.equal((await call("people/profile?id="+guest.id,{token:host.token})).profile.age_group,"25–34");
+
+  const walkData={
+    title:"Insieme al parco",city:"Trento",area_label:"Ingresso nord",
+    day:new Date(Date.now()+3*86400000).toISOString().slice(0,10),time:"10:00",duration_minutes:60,
+    max:3,latitude:46.07,longitude:11.12,dog_ids:[host.dog],description:"Percorso pianeggiante",
+  };
+  const {id:walkId}=await call("walk",{token:host.token,data:walkData,status:201});
+  assert.equal((await call("walks?friends=1",{token:guest.token})).walks[0].available_places,2);
+  assert.deepEqual((await call("walks?friends=1",{token:waiting.token})).walks,[]);
+  await call("join",{token:waiting.token,data:{walk_id:walkId,dog_ids:[second.id]},status:400});
+  await call("join",{token:guest.token,data:{walk_id:walkId,dog_ids:[guest.dog,second.id]},status:201});
+  await call("join",{token:waiting.token,data:{walk_id:walkId,dog_ids:[waiting.dog]},status:201});
+  const {requests}=await call("walks?view=mine",{token:host.token});
+  const two=requests.find(item=>item.profile_id===guest.id);
+  const one=requests.find(item=>item.profile_id===waiting.id);
+  await call("requests/action",{token:host.token,data:{walk_id:walkId,request_id:two.id}});
+  await call("requests/action",{token:host.token,data:{walk_id:walkId,request_id:one.id},status:409});
+  assert.deepEqual((await call("walks",{token:waiting.token})).walks,[]);
+  assert.equal((await call("walks?full=1",{token:waiting.token})).walks[0].available_places,0);
+  let detail=await call("walks/details?id="+walkId,{token:guest.token});
+  assert.equal(detail.participants[1].dogs.length,2);
+  assert.equal((await call("walks/details?id="+walkId,{token:waiting.token})).participants.length,0);
+  await call("reveal",{token:host.token,data:{walk_id:walkId,request_id:two.id}});
+  assert.equal((await call("walks/details?id="+walkId,{token:guest.token})).walk.area_label,"Ingresso nord");
+  const edited={...walkData,walk_id:walkId,revision:1,time:"11:00",area_label:"Ingresso sud"};
+  await call("walks/edit",{token:host.token,data:{...edited,max:2},status:409});
+  await call("walks/edit",{token:host.token,data:edited});
+  detail=await call("walks/details?id="+walkId,{token:guest.token});
+  assert.equal(detail.walk.reveal_exact,false);
+  assert.equal(detail.walk.revision,2);
+  assert.ok(!(JSON.stringify(detail).includes("Ingresso sud")));
+  const change=(await call("notifications",{token:guest.token})).items[0];
+  assert.equal(change.kind,"changed");
+  assert.match(change.details,/10:00.*11:00/);
+  await call("notifications/read",{token:guest.token,data:{id:change.id}});
+  assert.ok((await call("notifications",{token:guest.token})).items[0].read_at);
+  await call("profile/dogs/remove",{token:guest.token,data:{id:second.id},status:409});
+  await call("requests/withdraw",{token:guest.token,data:{walk_id:walkId}});
+  assert.equal((await call("walks",{token:waiting.token})).walks[0].available_places,2);
+  await call("profile/dogs/remove",{token:guest.token,data:{id:second.id}});
+  assert.equal((await call("auth/me",{token:guest.token})).profile.dogs.length,1);
+  await call("reports",{token:guest.token,data:{kind:"walk",id:walkId,reason:"Collaudo"}});
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS total FROM reports").get().total,1);
+  await call("people/relationship",{token:host.token,data:{target_id:guest.id,action:"block"}});
+  await call("people/profile?id="+guest.id,{token:host.token,status:404});
+  assert.deepEqual((await call("walks",{token:guest.token})).walks,[]);
+
+  const {codes}=await call("auth/recovery-codes",{token:guest.token,data:{proof:guest.proof}});
+  const code=codes[0];
+  assert.equal((await call("auth/recovery-name",{data:{code}})).username,"audit.guest");
+  const newProof=await passwordProof("audit.guest","una-nuova-frase-segreta");
+  await call("auth/recover",{data:{code,username:"audit.guest",proof:newProof}});
+  await call("auth/me",{token:guest.token,status:401});
+  await call("auth/recovery-name",{data:{code},status:404});
+  const {token}=await call("auth/login",{data:{username:"audit.guest",proof:newProof}});
+  await call("profile/dogs/remove",{token,data:{id:guest.dog}});
+  await call("walks",{token,status:403});
+  await call("auth/delete",{token,data:{proof:newProof}});
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS total FROM accounts WHERE username=?").get("audit.guest").total,0);
   sqlite.close();
 });
 

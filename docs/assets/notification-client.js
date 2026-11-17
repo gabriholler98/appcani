@@ -1,3 +1,5 @@
+import { announce,busy,button,element,status as messageStatus } from "./ui.js";
+
 const workerUrl = new URL("../service-worker.js", import.meta.url);
 const byId = id => document.getElementById(id);
 const labels = {
@@ -5,6 +7,9 @@ const labels = {
   accepted: "Richiesta accettata",
   cancelled: "Passeggiata annullata",
   chat: "Nuovo messaggio in chat",
+  changed: "Passeggiata modificata",
+  withdrawn: "Partecipazione ritirata",
+  rejected: "Richiesta rifiutata",
 };
 const dateFormat = new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" });
 
@@ -17,7 +22,7 @@ export async function currentPushEndpoint() {
   }
 }
 
-export function setupNotifications(api) {
+export function setupNotifications(api, {openItem,preferences,setPreferences}) {
   const dialog = byId("notificationsDialog");
   const bell = byId("openNotifications");
   const badge = byId("unreadNotifications");
@@ -26,6 +31,8 @@ export function setupNotifications(api) {
   const toggle = byId("pushToggle");
   const help = byId("pushHelp");
   const mark = byId("markNotificationsRead");
+  const test = byId("pushTest");
+  const pushForm = byId("pushPreferences");
   let generation = 0;
   let requestId = 0;
   let latestId;
@@ -67,7 +74,18 @@ export function setupNotifications(api) {
         const date = new Date(item.created_at * 1000);
         time.dateTime = date.toISOString();
         time.textContent = dateFormat.format(date);
-        row.append(heading, walk, time);
+        time.className="muted";
+        row.append(heading,walk,time);
+        if (item.details) row.append(element("p",item.details,"muted"));
+        row.append(button(item.kind==="chat"?"Apri chat":item.kind==="join"||item.kind==="withdrawn"?"Vedi richieste":"Vedi passeggiata",
+          control=>busy(control,async()=>{
+            if (item.read_at===null) {
+              const next=await api("/api/notifications/read",{data:{id:item.id}});
+              updateUnread(next.unread,false);
+            }
+            dialog.close();
+            await openItem(item);
+          }),"text-button"));
         list.append(row);
       }
       mark.disabled = !unread || !latestId;
@@ -78,6 +96,7 @@ export function setupNotifications(api) {
   }
 
   function showPushState() {
+    test.hidden=!push.enabled;
     toggle.textContent = push.enabled ? "Disattiva notifiche push" : "Attiva notifiche push";
     toggle.disabled = !push.enabled && Notification.permission === "denied";
     help.textContent = push.enabled ? "Notifiche push attive su questo dispositivo."
@@ -90,6 +109,7 @@ export function setupNotifications(api) {
     push = undefined;
     toggle.textContent = "Attiva notifiche push";
     toggle.disabled = true;
+    test.hidden=true;
     if (!navigator.serviceWorker || !window.PushManager || !window.Notification) {
       help.textContent = "Su iPhone e iPad, aggiungi l’app alla schermata Home e aprila da lì. Sugli altri dispositivi usa un browser che supporta le notifiche push.";
       return;
@@ -138,6 +158,41 @@ export function setupNotifications(api) {
     }
   };
 
+  test.onclick=control=>{
+    if (!push?.enabled || !push.subscription) return;
+    void busy(control.currentTarget,async()=>{
+      await api("/api/notifications/device/test",{data:{endpoint:push.subscription.endpoint}});
+      help.textContent="Invio accettato. Controlla le notifiche di questo dispositivo.";
+    },failure=>{help.textContent=failure.message;});
+  };
+
+  function showPreferences() {
+    const target=byId("pushKinds");
+    const muted=preferences();
+    target.replaceChildren(...Object.entries(labels).map(([kind,label])=>{
+      const checkbox=element("input");
+      checkbox.type="checkbox";
+      checkbox.name="enabled";
+      checkbox.value=kind;
+      checkbox.checked=!muted.includes(kind);
+      const option=element("label","","check");
+      option.append(checkbox,document.createTextNode(label));
+      return option;
+    }));
+    messageStatus(pushForm.querySelector(".form-error"));
+  }
+  pushForm.onsubmit=event=>{
+    event.preventDefault();
+    const formMessage=pushForm.querySelector(".form-error");
+    void busy(event.submitter,async()=>{
+      const enabled=new Set(new FormData(pushForm).getAll("enabled"));
+      const {muted}=await api("/api/notifications/preferences",{data:{muted:Object.keys(labels).filter(kind=>!enabled.has(kind))}});
+      setPreferences(muted);
+      messageStatus(formMessage);
+      announce("Preferenze salvate.");
+    },failure=>messageStatus(formMessage,failure.message));
+  };
+
   mark.onclick = async () => {
     const version = generation;
     mark.disabled = true;
@@ -158,6 +213,7 @@ export function setupNotifications(api) {
     latestId = undefined;
     mark.disabled = true;
     showStatus("Caricamento…");
+    showPreferences();
     dialog.showModal();
     void load();
     void preparePush();
@@ -177,3 +233,4 @@ export function setupNotifications(api) {
     },
   };
 }
+

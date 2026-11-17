@@ -9,7 +9,10 @@ const now = () => Math.floor(Date.now() / 1000);
 const recipients = {
   join: `SELECT p.account_id FROM walks w JOIN profiles p ON p.id = w.host_profile_id WHERE w.id = ?`,
   accepted: `SELECT p.account_id FROM join_requests j JOIN profiles p ON p.id = j.profile_id WHERE j.walk_id = ? AND j.id = ?`,
-  cancelled: `SELECT p.account_id FROM join_requests j JOIN profiles p ON p.id = j.profile_id WHERE j.walk_id = ?`,
+  rejected: `SELECT p.account_id FROM join_requests j JOIN profiles p ON p.id = j.profile_id WHERE j.walk_id = ? AND j.id = ?`,
+  withdrawn: `SELECT p.account_id FROM walks w JOIN profiles p ON p.id = w.host_profile_id WHERE w.id = ?`,
+  changed: `SELECT p.account_id FROM join_requests j JOIN profiles p ON p.id=j.profile_id WHERE j.walk_id=? AND j.status='accepted'`,
+  cancelled: `SELECT p.account_id FROM join_requests j JOIN profiles p ON p.id = j.profile_id WHERE j.walk_id = ? AND j.status IN ('pending','accepted')`,
   chat: `
     SELECT p.account_id FROM walks w JOIN profiles p ON p.id = w.host_profile_id WHERE w.id = ? AND p.id != ?
     UNION
@@ -18,14 +21,17 @@ const recipients = {
   `,
 };
 
-export async function commitNotification(env, ctx, mutation, kind, walkId, ...params) {
+export async function commitNotification(env, ctx, mutation, kind, walkId, params, {details="",actor=""}={}) {
   const timestamp = now();
   const insert = env.DB.prepare(`
-    INSERT INTO notifications (account_id, walk_id, kind, created_at)
-    SELECT DISTINCT account_id, ?, ?, ? FROM (${recipients[kind]})
+    INSERT INTO notifications (account_id, walk_id, kind, created_at, details)
+    SELECT DISTINCT account_id, ?, ?, ?, ? FROM (${recipients[kind]}) AS recipients
     WHERE account_id IS NOT NULL AND changes() > 0
+      AND NOT EXISTS (SELECT 1 FROM profiles p JOIN blocks b ON
+        (b.owner_id=p.id AND b.target_id=?) OR (b.target_id=p.id AND b.owner_id=?)
+        WHERE p.account_id=recipients.account_id)
     ON CONFLICT DO NOTHING RETURNING account_id
-  `).bind(walkId, kind, timestamp, ...params);
+  `).bind(walkId, kind, timestamp, details, ...params, actor, actor);
   const prune = env.DB.prepare(`
     DELETE FROM notifications WHERE id IN (
       SELECT id FROM notifications WHERE created_at < ? ORDER BY created_at LIMIT 100
@@ -33,7 +39,7 @@ export async function commitNotification(env, ctx, mutation, kind, walkId, ...pa
   `).bind(timestamp - retention);
   const [, changed, delivery] = await env.DB.batch([prune, mutation, insert]);
   if (ctx && env.VAPID_PRIVATE_JWK && delivery.results?.length) {
-    ctx.waitUntil(deliverPush(env, delivery.results.map(row => row.account_id)).catch(() => {
+    ctx.waitUntil(deliverPush(env, delivery.results.map(row => row.account_id),fetch,{kind}).catch(() => {
       console.warn(JSON.stringify({ event: "push_delivery_failed" }));
     }));
   }
@@ -47,7 +53,7 @@ export function unreadQuery(db, accountId) {
 
 export async function listNotifications(db, accountId) {
   const list = db.prepare(`
-    SELECT n.id, n.kind, n.created_at, n.read_at, w.title
+    SELECT n.id, n.kind, n.created_at, n.read_at, n.walk_id, n.details, w.title
     FROM notifications n JOIN walks w ON w.id = n.walk_id
     WHERE n.account_id = ? AND n.created_at >= ? ORDER BY n.id DESC LIMIT 30
   `).bind(accountId, now() - retention);
@@ -57,9 +63,10 @@ export async function listNotifications(db, accountId) {
 
 export async function markNotificationsRead(db, accountId, data) {
   const through = data?.through;
-  if (!Number.isSafeInteger(through) || through < 1) return error("Avvisi non validi.");
-  await db.prepare(`UPDATE notifications SET read_at = ? WHERE account_id = ? AND read_at IS NULL AND id <= ?`)
-    .bind(now(), accountId, through).run();
+  const id = data?.id??through;
+  if (!Number.isSafeInteger(id) || id < 1) return error("Avvisi non validi.");
+  await db.prepare(`UPDATE notifications SET read_at=? WHERE account_id=? AND read_at IS NULL AND id ${through===undefined?"=":"<="} ?`)
+    .bind(now(),accountId,id).run();
   const count = await unreadQuery(db, accountId).first();
   return json({ unread: count.unread });
 }
@@ -133,21 +140,24 @@ async function signVapid(privateKey, publicKey, origin, subject) {
   return "vapid t=" + input + "." + base64url(new Uint8Array(signature)) + ", k=" + publicKey;
 }
 
-export async function deliverPush(env, accounts, send = fetch) {
-  if (!accounts.length) return;
+export async function deliverPush(env, accounts, send = fetch, {kind="",endpoint=""}={}) {
+  if (!accounts.length || !env.VAPID_PRIVATE_JWK) return 0;
   const targets = [...new Set(accounts)].slice(0, maxPushesPerEvent);
   const slots = targets.map(() => "?").join(",");
   const { results } = await env.DB.prepare(`
-    SELECT endpoint, updated_at FROM push_devices WHERE account_id IN (${slots})
-    ORDER BY updated_at DESC LIMIT ?
-  `).bind(...targets, maxPushesPerEvent).all();
-  if (!results.length) return;
+    SELECT d.endpoint,d.updated_at FROM push_devices d JOIN profiles p ON p.account_id=d.account_id
+    WHERE d.account_id IN (${slots}) AND (?='' OR d.endpoint=?)
+      AND NOT EXISTS(SELECT 1 FROM json_each(p.push_muted) WHERE value=?)
+    ORDER BY d.updated_at DESC LIMIT ?
+  `).bind(...targets,endpoint,endpoint,kind,maxPushesPerEvent).all();
+  if (!results.length) return 0;
   const jwk = JSON.parse(env.VAPID_PRIVATE_JWK);
   const publicKey = vapidPublicKey(jwk);
   const privateKey = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
   const authorizations = new Map();
   const subject = new URL("/appcani/", env.PAGES_ORIGIN).href;
   const expired = [];
+  let accepted = 0;
   // Keep external connections below the Workers per-invocation concurrency limit.
   for (let i = 0; i < results.length; i += 5) {
     await Promise.all(results.slice(i, i + 5).map(async device => {
@@ -163,6 +173,7 @@ export async function deliverPush(env, accounts, send = fetch) {
           headers: { Authorization: await authorizations.get(endpoint.origin), TTL: "900", Topic: "dogs-in-giro" },
         });
         await response.body?.cancel();
+        if (response.ok) accepted += 1;
         if (response.status === 404 || response.status === 410) expired.push(device);
         if (!response.ok) {
           console.warn(JSON.stringify({ event: "push_provider_rejected", provider: endpoint.hostname, status: response.status }));
@@ -174,4 +185,16 @@ export async function deliverPush(env, accounts, send = fetch) {
   }
   if (expired.length) await env.DB.batch(expired.map(device =>
     env.DB.prepare("DELETE FROM push_devices WHERE endpoint = ? AND updated_at = ?").bind(device.endpoint, device.updated_at)));
+  return accepted;
+}
+
+export async function testDevice(env, account, data) {
+  const endpoint = supportedPushEndpoint(data?.endpoint)?.href;
+  if (!endpoint || !env.VAPID_PRIVATE_JWK) return error("Attiva prima le notifiche su questo dispositivo.",409);
+  const time = now();
+  const updated = await env.DB.prepare(`UPDATE push_devices SET last_test_at=? WHERE account_id=? AND endpoint=? AND last_test_at<=?`)
+    .bind(time,account.id,endpoint,time-60).run();
+  if (!updated.meta.changes) return error("Controlla che le push siano attive e attendi un minuto prima di riprovare.",429);
+  const accepted = await deliverPush(env,[account.id],fetch,{endpoint});
+  return accepted ? json({ok:true}) : error("Il servizio push ha rifiutato l’invio. Disattiva e riattiva le notifiche su questo dispositivo.",502);
 }

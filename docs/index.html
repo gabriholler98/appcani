@@ -1,112 +1,335 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<script src="./config.js"></script>
-<title>Dogs in Giro · Passeggiate tra cani</title>
-<meta name="description" content="Organizza passeggiate tra cani in Trentino-Alto Adige.">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f5f8f6" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#101a16" media="(prefers-color-scheme: dark)">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://nominatim.openstreetmap.org https://appcani-api.gabrieleholler98.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Dogs in Giro">
-<meta property="og:description" content="Organizza passeggiate tra cani in Trentino-Alto Adige.">
-<meta property="og:url" content="https://gabriholler98.github.io/appcani/">
-<meta property="og:image" content="https://gabriholler98.github.io/appcani/assets/dogs-in-giro-miniatura-light.png?v=2">
-<meta property="og:image:alt" content="Una zampa dentro un segnaposto verde">
-<meta name="twitter:card" content="summary">
-<link rel="icon" type="image/png" href="./assets/dogs-in-giro-miniatura-light.png?v=2">
-<link rel="icon" type="image/png" href="./assets/dogs-in-giro-miniatura.png" media="(prefers-color-scheme: dark)">
-<link rel="apple-touch-icon" href="./assets/dogs-in-giro-miniatura-light.png?v=2">
-<link rel="manifest" href="./manifest.webmanifest">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&amp;display=swap">
-<link rel="preconnect" href="https://unpkg.com"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><style>
-:root{--ink:#213d36;--pine:#245448;--sand:#fffaf1;--peach:#ffe0d1;--rose:#e96f64;--line:#e9ded0}*{box-sizing:border-box}body{margin:0;background:var(--sand);font:15px ui-rounded,system-ui,sans-serif;color:var(--ink)}button,input,select{font:inherit}button{cursor:pointer;border:0}.app{min-height:100vh;display:grid;grid-template-columns:330px 1fr}.side{padding:28px 20px;border-right:1px solid var(--line);background:#fffdf9;overflow:auto}.brand{display:flex;gap:10px;align-items:center;font-size:25px;font-weight:900;letter-spacing:-1px}.brand b{display:grid;place-items:center;width:44px;height:44px;border-radius:15px;background:var(--peach);font-size:25px}.tag{color:#769087;margin:7px 0 25px;font-size:13px}.profile,.requests{padding:15px;border:1px solid var(--line);border-radius:18px;background:#fff;margin-bottom:15px}.profile-head{display:flex;gap:11px;align-items:center}.dog{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:var(--peach);font-size:27px}.profile h2{margin:0;font-size:17px}.profile p,.muted{margin:3px 0;color:#6b7b75;font-size:13px}.outline,.primary{padding:11px 13px;border-radius:12px;font-weight:800}.outline{width:100%;background:#fff;border:1px solid var(--line);color:var(--pine);margin-top:12px}.primary{background:var(--pine);color:white}.request{padding:10px 0;border-bottom:1px solid #eee}.request:last-child{border:0}.request button{margin-top:6px;background:#e2f1e9;color:#225443;padding:7px 10px;border-radius:9px;font-weight:800}.main{min-width:0;padding:24px}.top{display:flex;gap:16px;justify-content:space-between;align-items:center;margin-bottom:17px}.top h1{margin:0;font-size:26px;letter-spacing:-.8px}.top p{margin:3px 0;color:#71827a}.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.chip{padding:8px 11px;border-radius:999px;background:#fff;border:1px solid var(--line);font-size:13px}.map-card{height:58vh;min-height:380px;border-radius:24px;overflow:hidden;border:1px solid var(--line);position:relative;background:#d5e5dc}.privacy{position:absolute;z-index:500;left:15px;bottom:15px;background:#fffdf9e8;backdrop-filter:blur(5px);padding:10px 12px;border-radius:12px;max-width:340px;font-size:12px;line-height:1.35}.legend{display:inline-block;width:10px;height:10px;border-radius:50%;background:#e96f64;margin-right:5px}.section-title{display:flex;justify-content:space-between;align-items:end;margin:28px 0 11px}.section-title h2{margin:0;font-size:20px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:13px}.card{background:white;border:1px solid var(--line);border-radius:18px;padding:16px}.card h3{margin:0 0 5px;font-size:17px}.card p{margin:5px 0;color:#63736d;font-size:13px}.card footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px}.status{font-size:12px;color:#b7544d;background:#fff0eb;padding:5px 8px;border-radius:999px}.empty{padding:32px;text-align:center;background:white;border:1px dashed #d8cab9;border-radius:18px;color:#6b7b75}.modal{border:0;border-radius:22px;padding:0;max-width:540px;width:calc(100% - 28px);box-shadow:0 24px 60px #122c2433}.modal::backdrop{background:#142d2666}.modal article{padding:24px}.modal h2{margin:0 0 6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0}.grid label,.wide{display:grid;gap:6px;font-size:13px;font-weight:800}.wide{margin:12px 0}input,select{border:1px solid #d7cfc3;border-radius:10px;padding:10px;background:white;color:var(--ink)}.actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}.cancel{padding:10px 13px;background:#f5eee4;border-radius:11px;color:#51665e}.toast{position:fixed;z-index:900;right:18px;bottom:18px;background:var(--ink);color:white;padding:12px 15px;border-radius:12px;display:none}.toast.show{display:block}.mode{display:flex;gap:7px;margin:12px 0}.mode button{flex:1;padding:9px;border:1px solid var(--line);background:white;border-radius:10px}.mode button.active{background:#e7f1ea;border-color:#80ae9b;color:#174b3d}@media(max-width:780px){.app{display:block}.side{border:0;border-bottom:1px solid var(--line);padding:17px}.main{padding:18px}.map-card{height:46vh;min-height:320px}.top{align-items:flex-start}.grid{grid-template-columns:1fr}.profile,.requests{display:none}.top .primary{font-size:13px;padding:10px}.brand{font-size:22px}}
-</style><link rel="stylesheet" href="./assets/brand.css?v=3">
-</head><body><main class="account-screen" id="accountScreen" aria-labelledby="accountHeading">
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  
+  <script src="./config.js"></script>
+  <title>Dogs in Giro · Passeggiate tra cani</title>
+  <meta name="description" content="Organizza passeggiate tra cani in Trentino-Alto Adige.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f8f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121b17" media="(prefers-color-scheme: dark)">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' blob: data: https://tile.openstreetmap.org https://unpkg.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://nominatim.openstreetmap.org https://appcani-api.gabrieleholler98.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Dogs in Giro">
+  <meta property="og:description" content="Organizza passeggiate tra cani in Trentino-Alto Adige.">
+  <meta property="og:url" content="https://gabriholler98.github.io/appcani/">
+  <meta property="og:image" content="https://gabriholler98.github.io/appcani/assets/dogs-in-giro-miniatura-light.png?v=2">
+  <meta property="og:image:alt" content="Una zampa dentro un segnaposto verde">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" type="image/png" href="./assets/dogs-in-giro-miniatura-light.png?v=2">
+  <link rel="icon" type="image/png" href="./assets/dogs-in-giro-miniatura.png" media="(prefers-color-scheme: dark)">
+  <link rel="apple-touch-icon" href="./assets/dogs-in-giro-miniatura-light.png?v=2">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&amp;display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
+  <link rel="stylesheet" href="./assets/brand.css?v=4">
+</head>
+<body>
+  <main class="account-screen" id="accountScreen" aria-labelledby="accountHeading">
   <div class="account-card">
     <picture class="brand">
   <source media="(prefers-color-scheme: dark)" srcset="./assets/dogs-in-giro-logo.png">
   <img src="./assets/dogs-in-giro-logo-light.png?v=2" width="2148" height="732" alt="Dogs in Giro">
 </picture>
-    <p class="account-loading" id="accountLoading" role="status">Caricamento…</p>
+    <p id="accountLoading" role="status">Caricamento…</p>
     <div id="accountEntry" hidden>
-      <div class="account-tabs" role="group" aria-label="Accedi o registrati">
+      <div class="segment" role="group" aria-label="Accedi o registrati">
         <button type="button" id="chooseLogin" aria-pressed="true">Accedi</button>
         <button type="button" id="chooseRegister" aria-pressed="false">Registrati</button>
       </div>
       <h1 id="accountHeading">Accedi al tuo account</h1>
-      <form class="account-form" id="accountForm">
-        <label>Nome utente
-          <input name="username" required minlength="3" maxlength="24" pattern="[a-zA-Z0-9._\-]{3,24}"
-            autocomplete="username" autocapitalize="none" spellcheck="false" aria-describedby="accountHint">
-        </label>
-        <p id="accountHint" class="muted" hidden>Da 3 a 24 caratteri. Puoi usare lettere, numeri, punti, trattini e underscore.</p>
-        <label>Password
-          <input name="password" required type="password" maxlength="128" autocomplete="current-password" aria-describedby="passwordHint">
-        </label>
-        <p id="passwordHint" class="muted" hidden>Usa almeno 12 caratteri.</p>
-        <label class="account-checkbox">
-          <input type="checkbox" id="showPassword"> Mostra password
-        </label>
-        <p class="account-error" id="accountError" role="alert" hidden></p>
-        <button class="primary account-submit" id="submitAccount" type="submit">Accedi</button>
+      <form class="flow" id="accountForm">
+        <label>Nome utente<input name="username" required minlength="3" maxlength="24" pattern="[a-zA-Z0-9._\-]{3,24}" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+        <p id="accountHint" class="muted" hidden>Da 3 a 24 caratteri, con lettere, numeri, punti, trattini o underscore.</p>
+        <label>Password<input name="password" required type="password" maxlength="128" autocomplete="current-password"></label>
+        <p id="passwordHint" class="muted" hidden>Usa almeno 12 caratteri. Puoi usare una frase.</p>
+        <label class="check"><input type="checkbox" id="showPassword"> Mostra password</label>
+        <label class="check"><input name="remember" type="checkbox"> Resta connesso su questo dispositivo</label>
+        <p class="form-error" id="accountError" role="alert" hidden></p>
+        <button class="primary" id="submitAccount" type="submit">Accedi</button>
       </form>
+      <div id="passkeyLogin" class="flow" hidden>
+        <button type="button" class="secondary" id="openPasskeyLogin">Accedi con passkey</button>
+        <button type="button" class="primary" id="confirmPasskeyLogin" hidden>Continua con la passkey</button>
+      </div>
+      <button type="button" class="text-button" id="openRecovery">Hai dimenticato i dati di accesso?</button>
     </div>
     <section id="accountSetup" aria-labelledby="setupHeading" hidden>
-      <h1 id="setupHeading">Crea il profilo del tuo cane</h1>
-      <p class="muted">Completa il profilo per organizzare passeggiate, inviare richieste e chattare.</p>
-      <div class="account-actions">
-        <button class="primary" type="button" id="createAccountProfile">Crea profilo</button>
-        <button class="outline" type="button" data-logout>Esci</button>
+      <h1 id="setupHeading">Aggiungi il tuo primo cane</h1>
+      <p class="muted">Completa il profilo per vedere e organizzare passeggiate.</p>
+      <div class="flow">
+        <button class="primary" type="button" id="createAccountProfile">Aggiungi un cane</button>
+        <button class="secondary" type="button" data-account-settings>Impostazioni account</button>
+        <button class="text-button" type="button" data-logout>Esci</button>
       </div>
     </section>
   </div>
   <noscript>Attiva JavaScript per accedere a Dogs in Giro.</noscript>
 </main>
-<dialog class="modal archive-modal" id="notificationsDialog" aria-labelledby="notificationsHeading">
-  <article>
+<dialog class="modal" id="recoveryDialog" aria-labelledby="recoveryHeading"><article>
+  <h2 id="recoveryHeading">Recupera l’account</h2>
+  <form id="recoveryForm" class="flow">
+    <label>Codice di recupero<input name="code" required autocapitalize="none" spellcheck="false" maxlength="40"></label>
+    <p id="foundUsername" role="status" hidden></p>
+    <label id="newPasswordField" hidden>Nuova password<input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>
+    <p class="form-error" role="status" hidden></p>
+    <div class="actions"><button type="button" class="secondary" data-close="recoveryDialog">Chiudi</button><button id="recoverySubmit" class="primary">Trova account</button></div>
+  </form>
+</article></dialog>
+<dialog class="modal" id="accountSettings" aria-labelledby="settingsHeading"><article>
+  <h2 id="settingsHeading">Impostazioni account</h2>
+  <div class="flow">
+    <p id="settingsUsername" class="muted"></p>
+    <details id="passkeySettings" hidden>
+      <summary>Passkey</summary>
+      <form class="flow" id="passkeyForm">
+        <label>Nome della passkey <span class="muted">(facoltativo)</span><input name="label" maxlength="40" placeholder="Es. Il mio iPhone"></label>
+        <label>Password attuale<input name="password" type="password" required autocomplete="current-password"></label>
+        <p class="form-error" role="status" hidden></p>
+        <div class="row"><button class="secondary" id="preparePasskey">Aggiungi passkey</button><button type="button" class="primary" id="confirmPasskey" hidden>Crea sul dispositivo</button></div>
+        <div id="passkeyList" class="flow"></div>
+      </form>
+    </details>
+    <details>
+      <summary>Codici di recupero</summary>
+      <form id="codesForm" class="flow">
+        <p class="muted">Salva questi codici in un posto sicuro. Ogni codice può reimpostare la password una sola volta. Generarne di nuovi sostituisce quelli precedenti.</p>
+        <label>Password attuale<input name="password" type="password" required autocomplete="current-password"></label>
+        <button class="secondary">Genera codici</button><pre id="recoveryCodes" hidden></pre><button type="button" id="saveCodes" class="secondary" hidden>Scarica i codici</button>
+        <p class="form-error" role="status" hidden></p>
+      </form>
+    </details>
+    <details>
+      <summary>Cambia password</summary>
+      <form id="passwordForm" class="flow">
+        <label>Password attuale<input name="password" type="password" required autocomplete="current-password"></label>
+        <label>Nuova password<input name="next" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+        <p class="form-error" role="status" hidden></p><button class="secondary">Salva password</button>
+      </form>
+    </details>
+    <button type="button" id="signOutAll" class="secondary">Esci da tutti i dispositivi</button>
+    <details>
+      <summary>Elimina account</summary>
+      <form id="deleteAccountForm" class="flow">
+        <p class="muted">L’eliminazione rimuove il tuo profilo, i tuoi cani, le tue passeggiate e i messaggi associati.</p>
+        <label>Password attuale<input name="password" type="password" required autocomplete="current-password"></label>
+        <p class="form-error" role="status" hidden></p><button class="danger">Elimina definitivamente</button>
+      </form>
+    </details>
+    <p id="settingsStatus" class="form-error" role="status" hidden></p>
+    <div class="actions"><button class="secondary" type="button" data-close="accountSettings">Chiudi</button></div>
+  </div>
+</article></dialog>
+
+  <div class="app" id="appView" hidden>
+    <aside class="sidebar">
+      <picture class="brand">
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/dogs-in-giro-logo.png">
+  <img src="./assets/dogs-in-giro-logo-light.png?v=2" width="2148" height="732" alt="Dogs in Giro">
+</picture>
+      <nav class="navigation" aria-label="Navigazione principale">
+        <button type="button" data-page="explore" aria-current="page"><span aria-hidden="true">⌖</span> Esplora</button>
+        <button type="button" data-page="plans"><span aria-hidden="true">▤</span> Le mie<span class="desktop-only"> passeggiate</span><b id="requestBadge" class="badge" hidden></b></button>
+        <button type="button" data-page="people"><span aria-hidden="true">⌕</span> Cerca</button>
+        <button type="button" data-page="profile"><span aria-hidden="true">●</span> Profilo</button>
+      </nav>
+    </aside>
+    <main id="mainContent" class="main">
+      <header class="toolbar">
+        <img src="./assets/dogs-in-giro-miniatura-light.png?v=2" width="40" height="40" alt="Dogs in Giro" class="mobile-icon">
+        <h1 id="pageHeading" tabindex="-1">Esplora</h1>
+        <button type="button" id="openNotifications" class="secondary toolbar-notice"><span aria-hidden="true">🔔</span><span class="desktop-only"> Notifiche</span><b id="unreadNotifications" class="badge" hidden></b></button>
+      </header>
+      <section id="explorePage" aria-label="Esplora">
+        <div class="explore-bar">
+          <div class="segment" aria-label="Vista delle passeggiate">
+            <button type="button" id="mapView" aria-pressed="true">Mappa</button>
+            <button type="button" id="listView" aria-pressed="false">Lista</button>
+          </div>
+          <button type="button" id="toggleFilters" class="secondary" aria-expanded="false" aria-controls="mapFilters">Filtri</button>
+          <button type="button" id="openWalk" class="primary"><span aria-hidden="true">+</span> Crea<span class="desktop-only"> passeggiata</span></button>
+        </div>
+        <form id="mapFilters" class="panel flow" hidden>
+          <div class="form-grid">
+            <label>Città<input name="city" maxlength="40" placeholder="Es. Trento"></label>
+            <label>Da<input name="day" type="date"></label>
+            <label>A<input name="before" type="date"></label>
+            <label>Taglia dei cani dell’organizzatore<select name="size"><option value="">Qualsiasi</option><option>Piccola</option><option>Media</option><option>Grande</option></select></label>
+            <label>Distanza da te<select name="distance"><option value="">Qualsiasi</option><option value="5">Entro 5 km</option><option value="15">Entro 15 km</option><option value="30">Entro 30 km</option></select></label>
+          </div>
+          <div class="row">
+            <label class="check"><input name="friends" type="checkbox"> Solo amici</label>
+            <label class="check"><input name="full" type="checkbox"> Mostra anche le complete</label>
+          </div>
+          <p id="filterLocationStatus" class="form-error" role="status" hidden></p>
+          <div class="actions"><button type="reset" class="secondary">Azzera</button><button class="primary">Applica</button></div>
+        </form>
+        <div class="map-card" id="mapPanel">
+          <div id="map" aria-label="Mappa delle passeggiate"></div>
+          <details class="map-info"><summary>Zona approssimativa ⓘ</summary><p>Il cerchio indica una zona di circa 500 m. L’organizzatore decide quando condividere il punto esatto con chi ha confermato.</p></details>
+        </div>
+        <p id="exploreStatus" class="muted" role="status"></p>
+        <div id="walks" class="cards"></div>
+      </section>
+      <section id="plansPage" hidden>
+        <div class="segment wrap" aria-label="Le mie passeggiate">
+          <button type="button" data-plan="scheduled" aria-pressed="true">In programma</button>
+          <button type="button" data-plan="received" aria-pressed="false">Ricevute</button>
+          <button type="button" data-plan="sent" aria-pressed="false">Inviate</button>
+          <button type="button" data-plan="archive" aria-pressed="false">Archivio</button>
+        </div>
+        <div id="archiveFilters" class="segment wrap archive-filters" hidden aria-label="Filtra archivio">
+          <button type="button" data-archive="created" aria-pressed="true">Create da te</button>
+          <button type="button" data-archive="requests" aria-pressed="false">Richieste</button>
+          <button type="button" data-archive="attended" aria-pressed="false">Confermate</button>
+        </div>
+        <p id="plansStatus" class="muted" role="status"></p>
+        <div id="plansList" class="cards"></div>
+      </section>
+      <section id="peoplePage" hidden>
+        <form id="searchPeople" class="inline-form">
+          <label>Cerca un proprietario o un cane<input name="q" type="search" minlength="2" maxlength="40" required></label>
+          <button class="primary">Cerca</button>
+        </form>
+        <p id="peopleStatus" class="muted" role="status"></p>
+        <div id="searchResults" class="flow"></div>
+        <h2>Amici e richieste</h2>
+        <div id="connectionsList" class="cards"></div>
+      </section>
+      <section id="profilePage" hidden>
+        <div class="panel owner-card">
+          <div><h2 id="ownerTitle"></h2><p id="currentUser" class="muted"></p></div>
+          <button type="button" id="editOwner" class="secondary">Modifica profilo</button>
+        </div>
+        <div class="section-head"><h2>I tuoi cani</h2><button type="button" id="addDog" class="primary">+ Aggiungi cane</button></div>
+        <div id="dogList" class="cards"></div>
+        <div class="section-head"><h2>Account</h2><button type="button" data-account-settings class="secondary">Impostazioni</button></div>
+        <button type="button" data-logout class="secondary">Esci</button>
+      </section>
+    </main>
+  </div>
+  <dialog class="modal" id="ownerDialog" aria-labelledby="ownerHeading"><article>
+    <h2 id="ownerHeading">Il tuo profilo</h2>
+    <form id="ownerForm" class="flow">
+      <label>Nome visibile<input name="owner" required maxlength="30" autocomplete="nickname"></label>
+      <div class="form-grid">
+        <label>Fascia d’età<select name="age_group">
+          <option value="">Preferisco non indicarla</option><option>18–24</option><option>25–34</option><option>35–44</option>
+          <option>45–54</option><option>55–64</option><option>65+</option>
+        </select></label>
+        <label>Sesso<select name="gender">
+          <option value="">Preferisco non indicarlo</option><option>Donna</option><option>Uomo</option><option>Altro</option>
+        </select></label>
+      </div>
+      <label>Chi può vedere età e sesso<select name="visibility">
+        <option value="friends">Solo gli amici</option><option value="members">Gli utenti dell’app</option><option value="private">Solo io</option>
+      </select></label>
+      <p class="form-error" role="status" hidden></p>
+      <div class="actions"><button type="button" class="secondary" data-close="ownerDialog">Annulla</button><button class="primary">Salva</button></div>
+    </form>
+  </article></dialog>
+  <dialog class="modal" id="dogDialog" aria-labelledby="dogHeading"><article>
+    <h2 id="dogHeading">Scheda del cane</h2>
+    <form id="dogForm" class="flow">
+      <label id="setupOwner">Il tuo nome visibile<input name="owner" maxlength="30" autocomplete="nickname"></label>
+      <div class="form-grid">
+        <label>Nome del cane<input name="name" required maxlength="30"></label>
+        <label>Razza o mix<input name="breed" required maxlength="45" placeholder="Es. Meticcio"></label>
+        <label>Anno di nascita<input name="birth" type="number" min="1995" max="2026" required inputmode="numeric"></label>
+        <label>Taglia<select name="size"><option>Piccola</option><option selected>Media</option><option>Grande</option></select></label>
+        <label>Energia<select name="energy"><option>Tranquilla</option><option selected>Media</option><option>Alta</option></select></label>
+        <label>Simbolo<select name="emoji"><option>🐕</option><option>🐶</option><option>🐩</option><option>🦮</option></select></label>
+      </div>
+      <label>Note utili <span class="muted">(facoltative)</span><textarea name="notes" maxlength="300" rows="2" placeholder="Es. Preferisce gruppi piccoli"></textarea></label>
+      <fieldset id="photoFields"><legend>Foto del cane</legend><img id="photoPreview" class="photo-preview" width="112" height="112" alt="Anteprima foto" hidden>
+        <label>Scegli una foto da ritagliare<input name="photo" type="file" accept="image/*"></label>
+        <label class="check" id="removePhoto" hidden><input name="removePhoto" type="checkbox"> Rimuovi la foto attuale</label>
+      </fieldset>
+      <p class="form-error" role="status" hidden></p>
+      <div class="actions"><button type="button" class="secondary" data-close="dogDialog">Annulla</button><button class="primary">Salva cane</button></div>
+    </form>
+  </article></dialog>
+  <dialog class="modal" id="walkDialog" aria-labelledby="walkHeading"><article>
+    <h2 id="walkHeading">Crea una passeggiata</h2>
+    <form id="walkForm" class="flow">
+      <label>Titolo<input name="title" required maxlength="55"></label>
+      <div class="form-grid">
+        <label>Giorno<input name="day" type="date" required></label>
+        <label>Ora<input name="time" type="time" required value="18:00"></label>
+        <label>Durata (minuti)<input name="duration_minutes" type="number" min="5" max="1440" value="60" required inputmode="numeric"></label>
+        <label>Capienza totale in cani<input name="max" type="number" min="1" max="24" value="3" required inputmode="numeric"></label>
+      </div>
+      <fieldset><legend>I cani che porti</legend><div id="hostDogs" class="choice-list"></div></fieldset>
+      <label>Descrizione <span class="muted">(facoltativa)</span><textarea name="description" maxlength="500" rows="3" placeholder="Tipo di percorso e informazioni utili. L’indirizzo preciso va nel campo dedicato."></textarea></label>
+      <fieldset><legend>Punto di ritrovo</legend>
+        <label>Luogo suggerito<select name="popular">
+          <option value="">Scegli un luogo o cerca un indirizzo</option>
+          <option value="Piazza Fiera|Trento|46.0666|11.1258">Piazza Fiera · Trento</option>
+          <option value="Parco delle Albere|Trento|46.0526|11.1141">Parco delle Albere · Trento</option>
+          <option value="Parco Petrarca|Bolzano|46.5001|11.3484">Parco Petrarca · Bolzano</option>
+          <option value="Lungo Passirio|Merano|46.6711|11.1591">Lungo Passirio · Merano</option>
+          <option value="Campana dei Caduti|Rovereto|45.8880|11.0458">Campana dei Caduti · Rovereto</option>
+        </select></label>
+        <label>Oppure cerca un punto d’incontro<input name="address" maxlength="140" placeholder="Es. Piazza Fiera, Trento"></label>
+        <button type="button" id="findAddress" class="secondary">Cerca indirizzo</button>
+        <p id="addressResult" class="muted" role="status"></p>
+        <div id="meetingMap" class="mini-map" hidden></div>
+      </fieldset>
+      <p class="form-error" role="status" hidden></p>
+      <div class="actions"><button type="button" class="secondary" data-close="walkDialog">Annulla</button><button class="primary">Riepilogo</button></div>
+    </form>
+  </article></dialog>
+  <dialog class="modal" id="summaryDialog" aria-labelledby="summaryHeading"><article>
+    <h2 id="summaryHeading">Riepilogo passeggiata</h2><div id="walkSummary" class="flow"></div>
+    <p id="summaryError" class="form-error" role="status" hidden></p>
+    <div class="actions"><button type="button" class="secondary" data-close="summaryDialog">Torna al modulo</button><button type="button" id="confirmWalk" class="primary">Pubblica</button></div>
+  </article></dialog>
+  <dialog class="modal" id="detailsDialog" aria-labelledby="detailHeading"><article>
+    <h2 id="detailHeading">Passeggiata</h2><div id="walkDetails" class="flow"></div>
+    <div class="actions"><button type="button" class="secondary" data-close="detailsDialog">Chiudi</button></div>
+  </article></dialog>
+  <dialog class="modal" id="joinDialog" aria-labelledby="joinHeading"><article>
+    <h2 id="joinHeading">Con quali cani vieni?</h2>
+    <form id="joinForm" class="flow"><p id="joinCapacity" class="muted"></p><fieldset><legend>I tuoi cani</legend><div id="joinDogs" class="choice-list"></div></fieldset>
+      <p class="form-error" role="status" hidden></p><div class="actions"><button type="button" class="secondary" data-close="joinDialog">Annulla</button><button class="primary">Invia richiesta</button></div>
+    </form>
+  </article></dialog>
+  <dialog class="modal" id="personDialog" aria-labelledby="personHeading"><article>
+    <h2 id="personHeading">Profilo</h2><div id="personCard" class="flow"></div>
+    <div class="actions"><button type="button" class="secondary" data-close="personDialog">Chiudi</button></div>
+  </article></dialog>
+  <dialog class="modal" id="reportDialog" aria-labelledby="reportHeading"><article>
+    <h2 id="reportHeading">Segnala</h2>
+    <form id="reportForm" class="flow"><label>Motivo<textarea name="reason" maxlength="500" rows="4" required></textarea></label>
+      <p class="form-error" role="status" hidden></p><div class="actions"><button class="secondary" type="button" data-close="reportDialog">Annulla</button><button class="primary">Invia segnalazione</button></div>
+    </form>
+  </article></dialog>
+  <dialog class="modal" id="notificationsDialog" aria-labelledby="notificationsHeading"><article>
     <h2 id="notificationsHeading">Notifiche</h2>
     <p id="notificationsStatus" class="muted" role="status" hidden></p>
     <ul id="notificationsList" class="notification-list"></ul>
-    <div class="notification-settings">
-      <button class="outline" type="button" id="pushToggle" disabled>Attiva notifiche push</button>
+    <div class="notification-settings flow">
+      <div class="row"><button class="secondary" type="button" id="pushToggle" disabled>Attiva notifiche push</button><button class="secondary" type="button" id="pushTest" hidden>Invia una prova</button></div>
       <p id="pushHelp" class="muted" role="status"></p>
+      <details><summary>Preferenze push</summary><form id="pushPreferences" class="flow"><div id="pushKinds" class="choice-list"></div>
+        <p class="form-error" role="status" hidden></p><button class="secondary">Salva preferenze</button></form></details>
     </div>
-    <div class="actions">
-      <button class="cancel" type="button" data-close="notificationsDialog">Chiudi</button>
-      <button class="outline" type="button" id="markNotificationsRead" disabled>Segna come lette</button>
-    </div>
-  </article>
-</dialog>
-<dialog class="modal archive-modal" id="archiveDialog" aria-labelledby="archiveHeading">
-  <article>
-    <h2 id="archiveHeading">Le mie passeggiate</h2>
-    <p class="muted">Ritrova le passeggiate concluse, le richieste e le chat.</p>
-    <div class="archive-filters" role="group" aria-label="Filtra le passeggiate archiviate">
-      <button type="button" data-archive-filter="created" aria-pressed="true">Create da te</button>
-      <button type="button" data-archive-filter="requests" aria-pressed="false">Richieste inviate</button>
-      <button type="button" data-archive-filter="attended" aria-pressed="false">Partecipazioni</button>
-    </div>
-    <p id="archiveNotice" role="status" class="muted" hidden></p>
-    <div id="archiveList" class="archive-list"></div>
-    <div class="actions"><button class="cancel" type="button" data-close="archiveDialog">Chiudi</button></div>
-  </article>
-</dialog>
-<dialog class="modal" id="chatDialog" aria-labelledby="chatHeading">
-  <article>
+    <div class="actions"><button class="secondary" type="button" data-close="notificationsDialog">Chiudi</button><button class="secondary" type="button" id="markNotificationsRead" disabled>Segna come lette</button></div>
+  </article></dialog>
+  <dialog class="modal" id="chatDialog" aria-labelledby="chatHeading"><article>
     <h2 id="chatHeading">Chat della passeggiata</h2>
-    <p class="muted">Conoscetevi qui prima di condividere il luogo esatto.</p>
-    <div id="chatMessages" class="chat-messages" role="log"></div>
-    <p id="chatArchived" class="muted" hidden>Passeggiata conclusa. Puoi consultare la chat archiviata.</p>
-    <form id="chatForm" class="chat-form">
-      <input name="message" aria-label="Messaggio" maxlength="500" required placeholder="Scrivi un messaggio">
-      <button class="primary" type="submit">Invia</button>
-    </form>
-    <div class="actions"><button class="cancel" type="button" data-close="chatDialog">Chiudi</button></div>
-  </article>
-</dialog>
-<div class="app" id="appView" hidden><aside class="side"><picture class="brand">
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/dogs-in-giro-logo.png">
-  <img src="./assets/dogs-in-giro-logo-light.png?v=2" width="2148" height="732" alt="Dogs in Giro">
-</picture><div class="account-bar"><span id="currentUser"></span><button type="button" class="outline" data-logout>Esci</button></div><section class="profile" id="profileBox"><p class="muted">Il tuo profilo</p><div class="profile-head"><div class="dog" id="myEmoji">🐕</div><div><h2 id="myDog">Crea il profilo</h2><p id="myDetails">Per partecipare alle passeggiate.</p></div></div><button class="outline" id="editProfile">Crea profilo</button></section><button class="outline archive-entry" type="button" id="openNotifications"><span aria-hidden="true">🔔</span> Notifiche<span id="unreadNotifications" class="notification-badge" hidden></span></button><button class="outline archive-entry" type="button" id="openArchive">Le mie passeggiate</button><section class="requests" id="requestBox"><strong>Richieste ricevute</strong><p class="muted">Qui compariranno le richieste per le tue passeggiate.</p></section></aside><main class="main"><header class="top"><div><h1>Trentino‑Alto Adige</h1><p>Scopri cani e passeggiate, senza esporre l’indirizzo preciso.</p></div><button class="primary" id="openWalk">+ Crea una passeggiata</button></header><div class="chips"><span class="chip">🐾 profili reali condivisi</span><span class="chip">📍 raggio visibile: 500 m</span><span class="chip">🔒 indirizzo dopo l’accettazione</span></div><div class="map-card"><div id="map" style="width:100%;height:100%"></div><div class="privacy"><span class="legend"></span><b>Zona approssimativa</b><br>Il cerchio mostra un’area di circa 500 metri. L’indirizzo inserito dall’organizzatore non viene mostrato pubblicamente.</div></div><div class="section-title"><h2>Passeggiate nella rete</h2><span class="muted" id="count"></span></div><section class="cards" id="walks"></section></main></div><dialog class="modal" id="profileDialog"><article><h2>Il profilo del tuo cane</h2><p class="muted">Il nome, la razza e la taglia del cane compaiono sulle passeggiate che pubblichi.</p><form id="profileForm"><div class="grid"><label>Il tuo nome<input name="owner" required maxlength="30" placeholder="Es. Anna"></label><label>Nome del cane<input name="dog" required maxlength="30" placeholder="Es. Milo"></label><label>Razza o mix<input name="breed" required maxlength="45" placeholder="Es. Meticcio"></label><label>Anno di nascita<input name="birth" required type="number" min="1995" max="2026" value="2022"></label><label>Taglia<select name="size"><option>Piccola</option><option selected>Media</option><option>Grande</option></select></label><label>Energia<select name="energy"><option>Tranquilla</option><option selected>Media</option><option>Alta</option></select></label></div><label class="wide">Simbolo del cane<select name="emoji"><option>🐕</option><option>🐶</option><option>🐩</option><option>🦮</option></select></label><div class="actions"><button type="button" class="cancel" data-close="profileDialog">Annulla</button><button class="primary">Salva profilo</button></div></form></article></dialog><dialog class="modal" id="walkDialog"><article><h2>Crea una passeggiata</h2><p class="muted">Il luogo preciso viene salvato, ma gli altri vedono soltanto il raggio di sicurezza.</p><form id="walkForm"><div class="grid"><label>Titolo<input name="title" required maxlength="55" placeholder="Passeggiata tranquilla"></label><label>Città<input name="city" required maxlength="40" placeholder="Trento"></label><label>Giorno<input name="day" type="date" required></label><label>Ora<input name="time" type="time" required value="18:00"></label><label>Durata prevista (minuti)<input name="duration_minutes" type="number" min="5" max="1440" step="1" value="60" required inputmode="numeric"></label><label>Partecipanti massimi<select name="max"><option value="1">1 amico (consigliato)</option><option value="2">2 amici</option><option value="3">3 amici</option></select></label></div><div class="mode"><button type="button" class="active" data-mode="popular">Luogo popolare</button><button type="button" data-mode="address">Inserisci indirizzo</button></div><div id="popularFields"><label class="wide">Punto suggerito<select name="popular"><option value="Piazza Fiera, Trento|46.0666|11.1258">Piazza Fiera · Trento</option><option value="Parco delle Albere, Trento|46.0526|11.1141">Parco delle Albere · Trento</option><option value="Parco Petrarca, Bolzano|46.5001|11.3484">Parco Petrarca · Bolzano</option><option value="Lungo Passirio, Merano|46.6711|11.1591">Lungo Passirio · Merano</option><option value="Campana dei Caduti, Rovereto|45.8880|11.0458">Campana dei Caduti · Rovereto</option></select></label></div><div id="addressFields" hidden><label class="wide">Indirizzo o luogo<input name="address" placeholder="Es. Via Rosmini 10, Rovereto"></label><button type="button" class="outline" id="findAddress">Cerca indirizzo sulla mappa</button><p class="muted" id="addressResult"></p></div><div class="actions"><button type="button" class="cancel" data-close="walkDialog">Annulla</button><button class="primary">Pubblica</button></div></form></article></dialog><div class="toast" id="toast"></div><script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
-<script type="module" src="./assets/app.js?v=3"></script>
-</body></html>
+    <button class="secondary" id="olderMessages" type="button" hidden>Mostra messaggi precedenti</button>
+    <div id="chatMessages" class="chat-messages" role="log" aria-label="Messaggi"></div>
+    <button class="secondary" id="newMessages" type="button" hidden>Vai ai nuovi messaggi</button>
+    <p id="chatArchived" class="muted" hidden>Passeggiata conclusa · chat in sola lettura.</p>
+    <p id="chatStatus" class="muted" role="status" hidden></p>
+    <form id="chatForm" class="chat-form"><input name="message" aria-label="Messaggio" maxlength="500" required placeholder="Scrivi un messaggio"><button class="primary">Invia</button></form>
+    <div class="actions"><button class="secondary" type="button" data-close="chatDialog">Chiudi</button></div>
+  </article></dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+  <script type="module" src="./assets/app.js?v=4"></script>
+</body>
+</html>
