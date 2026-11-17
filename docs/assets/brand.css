@@ -27,7 +27,7 @@ h1, h2, h3 {
   display: block;
   overflow: hidden;
   border-radius: 16px;
-  background: #fff;
+  background: transparent;
 }
 
 .brand img {

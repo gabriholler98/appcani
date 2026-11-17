@@ -8,6 +8,8 @@ function replace(source, target, value) {
 }
 
 const siteUrl = "https://gabriholler98.github.io/appcani/";
+const lightLogo = "assets/dogs-in-giro-logo-light.png?v=2";
+const lightThumbnail = "assets/dogs-in-giro-miniatura-light.png?v=2";
 const config = await readFile(new URL("./docs/config.js", import.meta.url), "utf8");
 const apiUrl = new URL(config.match(/INSIEME_API_ORIGIN\s*=\s*"([^"]+)"/)?.[1] ?? "");
 const brandHead = `
@@ -22,20 +24,20 @@ const brandHead = `
 <meta property="og:title" content="Dogs in Giro">
 <meta property="og:description" content="Organizza passeggiate tra cani in Trentino-Alto Adige.">
 <meta property="og:url" content="${siteUrl}">
-<meta property="og:image" content="${siteUrl}assets/dogs-in-giro-miniatura-light.png">
-<meta property="og:image:alt" content="Una zampa dentro un segnaposto verde su fondo bianco">
+<meta property="og:image" content="${siteUrl}${lightThumbnail}">
+<meta property="og:image:alt" content="Una zampa dentro un segnaposto verde">
 <meta name="twitter:card" content="summary">
-<link rel="icon" type="image/png" href="./assets/dogs-in-giro-miniatura-light.png">
+<link rel="icon" type="image/png" href="./${lightThumbnail}">
 <link rel="icon" type="image/png" href="./assets/dogs-in-giro-miniatura.png" media="(prefers-color-scheme: dark)">
-<link rel="apple-touch-icon" href="./assets/dogs-in-giro-miniatura-light.png">
+<link rel="apple-touch-icon" href="./${lightThumbnail}">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&amp;display=swap">
 `;
 const brandMarkup = `<picture class="brand">
   <source media="(prefers-color-scheme: dark)" srcset="./assets/dogs-in-giro-logo.png">
-  <img src="./assets/dogs-in-giro-logo-light.png" width="2148" height="732" alt="Dogs in Giro">
+  <img src="./${lightLogo}" width="2148" height="732" alt="Dogs in Giro">
 </picture>`;
 let html = replace(page, "<title>Insieme · passeggiate tra cani</title>", brandHead);
-html = replace(html, '</head>', '<link rel="stylesheet" href="./assets/brand.css">\n</head>');
+html = replace(html, '</head>', '<link rel="stylesheet" href="./assets/brand.css?v=2">\n</head>');
 html = replace(html, '<div class="brand"><b>🐕🐶</b>insieme</div>', brandMarkup);
 const accountTemplate = await readFile(new URL("./account-layout.html", import.meta.url), "utf8");
 const accountMarkup = replace(accountTemplate, "<!-- brand -->", brandMarkup);
