@@ -129,7 +129,11 @@ test("account required, data follows the account and chat stays private", async 
   await call("profile", { token: guest, data: { ...profile, dog: "Bruno", id: hostProfile.id } });
   assert.equal((await call("notifications/device/check", { token: guest, data: device })).enabled, false);
   assert.notEqual((await call("auth/me", { token: guest })).profile.id, hostProfile.id);
-  assert.notEqual((await call("walks", { token: guest })).walks[0].latitude, walk.latitude);
+  const publicWalk = (await call("walks", { token: guest })).walks[0];
+  assert.notEqual(publicWalk.latitude, walk.latitude);
+  assert.equal(publicWalk.latitude, walk.public_latitude);
+  assert.equal(publicWalk.longitude, walk.public_longitude);
+  assert.ok(!("public_latitude" in publicWalk));
   await call("join", { token: guest, data: { walk_id: walk.id }, status: 201 });
   assert.equal((await call("walks", { token: host })).unread_notifications, 1);
   assert.equal((await call("notifications", { token: guest })).unread, 0);

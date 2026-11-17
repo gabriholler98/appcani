@@ -14,6 +14,7 @@ const sections={explore:"Esplora",plans:"Le mie passeggiate",people:"Cerca",prof
 const requestLabels={pending:"In attesa",accepted:"Confermata",withdrawn:"Ritirata",rejected:"Rifiutata"};
 const coordinates=[46.43,11.25];
 const tileUrl="https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const zoneRadius=500;
 let profile=null, page="explore", plan="scheduled", archive="created", mapView=true;
 let filters=new URLSearchParams();
 let nearby=null, filterVersion=0;
@@ -105,6 +106,9 @@ function renderMap() {
   if (map || !window.L || !mapView || byId("explorePage").hidden) return;
   map=window.L.map("map",{zoomControl:false,scrollWheelZoom:false})
     .setView(coordinates,window.matchMedia("(max-width: 830px)").matches?8:9);
+  const updateZoneSymbols=()=>byId("map").classList.toggle("zone-overview",map.getZoom()<13);
+  map.on("zoomend",updateZoneSymbols);
+  updateZoneSymbols();
   window.L.control.zoom({position:"topright"}).addTo(map);
   window.L.tileLayer(tileUrl,{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
   markers=window.L.layerGroup().addTo(map);
@@ -217,8 +221,10 @@ function walkCard(walk) {
 function showExplore(events) {
   const walks=nearby?events.filter(walk=>{
     const rad=Math.PI/180;
-    const a=Math.sin((walk.latitude-nearby.latitude)*rad/2)**2+
-      Math.cos(walk.latitude*rad)*Math.cos(nearby.latitude*rad)*Math.sin((walk.longitude-nearby.longitude)*rad/2)**2;
+    const latitude=walk.public_latitude??walk.latitude;
+    const longitude=walk.public_longitude??walk.longitude;
+    const a=Math.sin((latitude-nearby.latitude)*rad/2)**2+
+      Math.cos(latitude*rad)*Math.cos(nearby.latitude*rad)*Math.sin((longitude-nearby.longitude)*rad/2)**2;
     return 12742*Math.asin(Math.sqrt(Math.min(1,a)))<=nearby.radius;
   }):events;
   const signature=JSON.stringify(walks);
@@ -232,14 +238,20 @@ function showExplore(events) {
   markers.clearLayers();
   const L=window.L;
   for(const walk of walks) {
-    const point=[walk.latitude,walk.longitude];
+    const point=[walk.public_latitude??walk.latitude,walk.public_longitude??walk.longitude];
     if (!point.every(Number.isFinite)) continue;
-    if (!walk.reveal_exact) L.circle(point,{radius:500,color:"#08654b",fillOpacity:.12,interactive:false}).addTo(markers);
+    const zone=L.circle(point,{radius:zoneRadius,color:"#075b43",weight:3,dashArray:"5 4",
+      fillColor:"#2dbc85",fillOpacity:.24,interactive:false}).addTo(markers);
     const icon=element("span",walk.emoji??"🐕","map-dog");
     const popup=element("div","","map-popup");
     popup.append(element("strong",walk.title),element("p",schedule(walk)),element("p",slots(walk.available_places)),
+      button("Inquadra zona di 500 m",()=>{
+        map.closePopup();
+        map.fitBounds(zone.getBounds(),{padding:[30,30],maxZoom:16});
+      }),
       button("Vedi dettagli",()=>openDetails(walk.id)));
-    L.marker(point,{title:walk.title,alt:walk.title,
+    const label=walk.title+" · zona approssimativa";
+    L.marker(point,{title:label,alt:label,
       icon:L.divIcon({className:"map-pin",html:icon,iconSize:[35,35],iconAnchor:[17,17]})}).addTo(markers).bindPopup(popup);
   }
   return true;
@@ -348,6 +360,17 @@ async function openDetails(id,openChat=false) {
     }
     body.replaceChildren(element("p",schedule(walk),"meta"),element("p",walk.area_label,"muted"),
       element("p",live?slots(walk.available_places)+" · Capienza "+walk.max_participants+" cani":eventBadge(walk),"muted"));
+    if (walk.reveal_exact && Number.isFinite(walk.latitude) && Number.isFinite(walk.longitude)) {
+      const directions=element("a","Apri il punto di ritrovo sulla mappa","secondary meeting-link");
+      const location=new URL("https://www.openstreetmap.org/");
+      location.searchParams.set("mlat",walk.latitude);
+      location.searchParams.set("mlon",walk.longitude);
+      location.hash="map=17/"+walk.latitude+"/"+walk.longitude;
+      directions.href=location.href;
+      directions.target="_blank";
+      directions.rel="noopener noreferrer";
+      body.append(directions);
+    }
     if (walk.description) body.append(element("p",walk.description,"card-description"));
     if (participants.length) {
       body.append(element("h3","Partecipanti"));

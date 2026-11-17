@@ -49,7 +49,7 @@ export const page = `<!doctype html>
         </form>
         <div class="map-card" id="mapPanel">
           <div id="map" aria-label="Mappa delle passeggiate"></div>
-          <details class="map-info"><summary>Zona approssimativa ⓘ</summary><p>Il cerchio indica una zona di circa 500 m. L’organizzatore decide quando condividere il punto esatto con chi ha confermato.</p></details>
+          <details class="map-info"><summary>Zona approssimativa ⓘ</summary><p>L’anello identifica la zona sulla mappa generale. Tocca il segnaposto e scegli «Inquadra zona di 500 m» per vedere il raggio in scala. Il punto esatto è nei dettagli per chi ha accesso.</p></details>
         </div>
         <p id="exploreStatus" class="muted" role="status"></p>
         <div id="walks" class="cards"></div>
@@ -211,6 +211,6 @@ export const page = `<!doctype html>
   </article></dialog>
   <div class="toast" id="toast" role="status" hidden></div>
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
-  <script type="module" src="./assets/app.js?v=4"></script>
+  <script type="module" src="./assets/app.js?v=5"></script>
 </body>
 </html>`;

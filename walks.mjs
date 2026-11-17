@@ -81,7 +81,12 @@ export async function listWalks(env, account, query) {
     { name:"HMAC",hash:"SHA-256" },false,["sign"]);
   const walks = await Promise.all(events.results.map(async row=>{
     const walk = viewWalk(row,account.profileId);
-    if (!own && !walk.reveal_exact) Object.assign(walk,await maskedPoint(row,key));
+    if (own) return walk;
+    const point = await maskedPoint(row,key);
+    if (walk.reveal_exact) {
+      return {...walk,public_latitude:point.latitude,public_longitude:point.longitude};
+    }
+    Object.assign(walk,point);
     return walk;
   }));
   return json({ walks, requests:requests.results.map(({dogs_json,...row})=>{
