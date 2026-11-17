@@ -1,125 +1,204 @@
-export const page = String.raw`<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Insieme · passeggiate tra cani</title><link rel="preconnect" href="https://unpkg.com"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><style>
-:root{--ink:#213d36;--pine:#245448;--sand:#fffaf1;--peach:#ffe0d1;--rose:#e96f64;--line:#e9ded0}*{box-sizing:border-box}body{margin:0;background:var(--sand);font:15px ui-rounded,system-ui,sans-serif;color:var(--ink)}button,input,select{font:inherit}button{cursor:pointer;border:0}.app{min-height:100vh;display:grid;grid-template-columns:330px 1fr}.side{padding:28px 20px;border-right:1px solid var(--line);background:#fffdf9;overflow:auto}.brand{display:flex;gap:10px;align-items:center;font-size:25px;font-weight:900;letter-spacing:-1px}.brand b{display:grid;place-items:center;width:44px;height:44px;border-radius:15px;background:var(--peach);font-size:25px}.tag{color:#769087;margin:7px 0 25px;font-size:13px}.profile,.requests{padding:15px;border:1px solid var(--line);border-radius:18px;background:#fff;margin-bottom:15px}.profile-head{display:flex;gap:11px;align-items:center}.dog{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:var(--peach);font-size:27px}.profile h2{margin:0;font-size:17px}.profile p,.muted{margin:3px 0;color:#6b7b75;font-size:13px}.outline,.primary{padding:11px 13px;border-radius:12px;font-weight:800}.outline{width:100%;background:#fff;border:1px solid var(--line);color:var(--pine);margin-top:12px}.primary{background:var(--pine);color:white}.request{padding:10px 0;border-bottom:1px solid #eee}.request:last-child{border:0}.request button{margin-top:6px;background:#e2f1e9;color:#225443;padding:7px 10px;border-radius:9px;font-weight:800}.main{min-width:0;padding:24px}.top{display:flex;gap:16px;justify-content:space-between;align-items:center;margin-bottom:17px}.top h1{margin:0;font-size:26px;letter-spacing:-.8px}.top p{margin:3px 0;color:#71827a}.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.chip{padding:8px 11px;border-radius:999px;background:#fff;border:1px solid var(--line);font-size:13px}.map-card{height:58vh;min-height:380px;border-radius:24px;overflow:hidden;border:1px solid var(--line);position:relative;background:#d5e5dc}.privacy{position:absolute;z-index:500;left:15px;bottom:15px;background:#fffdf9e8;backdrop-filter:blur(5px);padding:10px 12px;border-radius:12px;max-width:340px;font-size:12px;line-height:1.35}.legend{display:inline-block;width:10px;height:10px;border-radius:50%;background:#e96f64;margin-right:5px}.section-title{display:flex;justify-content:space-between;align-items:end;margin:28px 0 11px}.section-title h2{margin:0;font-size:20px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:13px}.card{background:white;border:1px solid var(--line);border-radius:18px;padding:16px}.card h3{margin:0 0 5px;font-size:17px}.card p{margin:5px 0;color:#63736d;font-size:13px}.card footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px}.status{font-size:12px;color:#b7544d;background:#fff0eb;padding:5px 8px;border-radius:999px}.empty{padding:32px;text-align:center;background:white;border:1px dashed #d8cab9;border-radius:18px;color:#6b7b75}.modal{border:0;border-radius:22px;padding:0;max-width:540px;width:calc(100% - 28px);box-shadow:0 24px 60px #122c2433}.modal::backdrop{background:#142d2666}.modal article{padding:24px}.modal h2{margin:0 0 6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0}.grid label,.wide{display:grid;gap:6px;font-size:13px;font-weight:800}.wide{margin:12px 0}input,select{border:1px solid #d7cfc3;border-radius:10px;padding:10px;background:white;color:var(--ink)}.actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}.cancel{padding:10px 13px;background:#f5eee4;border-radius:11px;color:#51665e}.toast{position:fixed;z-index:900;right:18px;bottom:18px;background:var(--ink);color:white;padding:12px 15px;border-radius:12px;display:none}.toast.show{display:block}.mode{display:flex;gap:7px;margin:12px 0}.mode button{flex:1;padding:9px;border:1px solid var(--line);background:white;border-radius:10px}.mode button.active{background:#e7f1ea;border-color:#80ae9b;color:#174b3d}@media(max-width:780px){.app{display:block}.side{border:0;border-bottom:1px solid var(--line);padding:17px}.main{padding:18px}.map-card{height:46vh;min-height:320px}.top{align-items:flex-start}.grid{grid-template-columns:1fr}.profile,.requests{display:none}.top .primary{font-size:13px;padding:10px}.brand{font-size:22px}}
-</style></head><body><div class="app"><aside class="side"><div class="brand"><b>🐕🐶</b>insieme</div><p class="tag">Passeggiate che iniziano dal cane.</p><section class="profile" id="profileBox"><p class="muted">Il tuo profilo</p><div class="profile-head"><div class="dog" id="myEmoji">🐕</div><div><h2 id="myDog">Crea il profilo</h2><p id="myDetails">Per partecipare alle passeggiate.</p></div></div><button class="outline" id="editProfile">Crea profilo</button></section><section class="requests" id="requestBox"><strong>Richieste ricevute</strong><p class="muted">Qui compariranno le richieste per le tue passeggiate.</p></section></aside><main class="main"><header class="top"><div><h1>Trentino‑Alto Adige</h1><p>Scopri cani e passeggiate, senza esporre l’indirizzo preciso.</p></div><button class="primary" id="openWalk">+ Crea una passeggiata</button></header><div class="chips"><span class="chip">🐾 profili reali condivisi</span><span class="chip">📍 raggio visibile: 500 m</span><span class="chip">🔒 indirizzo dopo l’accettazione</span></div><div class="map-card"><div id="map" style="width:100%;height:100%"></div><div class="privacy"><span class="legend"></span><b>Zona approssimativa</b><br>Il cerchio mostra un’area di circa 500 metri. L’indirizzo inserito dall’organizzatore non viene mostrato pubblicamente.</div></div><div class="section-title"><h2>Passeggiate nella rete</h2><span class="muted" id="count"></span></div><section class="cards" id="walks"></section></main></div><dialog class="modal" id="profileDialog"><article><h2>Il profilo del tuo cane</h2><p class="muted">Sarà visibile agli amici che aprono questo stesso link.</p><form id="profileForm"><div class="grid"><label>Il tuo nome<input name="owner" required maxlength="30" placeholder="Es. Anna"></label><label>Nome del cane<input name="dog" required maxlength="30" placeholder="Es. Milo"></label><label>Razza o mix<input name="breed" required maxlength="45" placeholder="Es. Meticcio"></label><label>Anno di nascita<input name="birth" required type="number" min="1995" max="2026" value="2022"></label><label>Taglia<select name="size"><option>Piccola</option><option selected>Media</option><option>Grande</option></select></label><label>Energia<select name="energy"><option>Tranquilla</option><option selected>Media</option><option>Alta</option></select></label></div><label class="wide">Simbolo del cane<select name="emoji"><option>🐕</option><option>🐶</option><option>🐩</option><option>🦮</option></select></label><div class="actions"><button type="button" class="cancel" data-close="profileDialog">Annulla</button><button class="primary">Salva profilo</button></div></form></article></dialog><dialog class="modal" id="walkDialog"><article><h2>Crea una passeggiata</h2><p class="muted">Il luogo preciso viene salvato, ma gli altri vedono soltanto il raggio di sicurezza.</p><form id="walkForm"><div class="grid"><label>Titolo<input name="title" required maxlength="55" placeholder="Passeggiata tranquilla"></label><label>Città<input name="city" required maxlength="40" placeholder="Trento"></label><label>Giorno<input name="day" type="date" required></label><label>Ora<input name="time" type="time" required value="18:00"></label><label>Partecipanti massimi<select name="max"><option value="1">1 amico (consigliato)</option><option value="2">2 amici</option><option value="3">3 amici</option></select></label></div><div class="mode"><button type="button" class="active" data-mode="popular">Luogo popolare</button><button type="button" data-mode="address">Inserisci indirizzo</button></div><div id="popularFields"><label class="wide">Punto suggerito<select name="popular"><option value="Piazza Fiera, Trento|46.0666|11.1258">Piazza Fiera · Trento</option><option value="Parco delle Albere, Trento|46.0526|11.1141">Parco delle Albere · Trento</option><option value="Parco Petrarca, Bolzano|46.5001|11.3484">Parco Petrarca · Bolzano</option><option value="Lungo Passirio, Merano|46.6711|11.1591">Lungo Passirio · Merano</option><option value="Campana dei Caduti, Rovereto|45.8880|11.0458">Campana dei Caduti · Rovereto</option></select></label></div><div id="addressFields" hidden><label class="wide">Indirizzo o luogo<input name="address" placeholder="Es. Via Rosmini 10, Rovereto"></label><button type="button" class="outline" id="findAddress">Cerca indirizzo sulla mappa</button><p class="muted" id="addressResult"></p></div><div class="actions"><button type="button" class="cancel" data-close="walkDialog">Annulla</button><button class="primary">Pubblica</button></div></form></article></dialog><div class="toast" id="toast"></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
-var profile=JSON.parse(localStorage.getItem('insieme-shared-profile')||'null'), map=L.map('map',{zoomControl:false}).setView([46.45,11.25],9), markers=[], locationChoice=null, selectedMode='popular';L.control.zoom({position:'topright'}).addTo(map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-function id(){return crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2)}function toast(t){var e=document.getElementById('toast');e.textContent=t;e.classList.add('show');setTimeout(function(){e.classList.remove('show')},2800)}function api(path,opt){return fetch(path,opt).then(function(r){return r.json().then(function(j){if(!r.ok)throw Error(j.error||'Qualcosa non ha funzionato');return j})})}function updateProfile(){var p=profile,btn=document.getElementById('editProfile');if(!p)return;document.getElementById('myEmoji').textContent=p.emoji;document.getElementById('myDog').textContent=p.dog;document.getElementById('myDetails').textContent=p.breed+' · '+p.size.toLowerCase();btn.textContent='Modifica profilo'}function viewer(){return profile?('?profile_id='+encodeURIComponent(profile.id)+'&token='+encodeURIComponent(profile.token)):''}
-function load(){api('/api/walks'+viewer()).then(function(data){renderWalks(data.walks);renderRequests(data.requests||[])}).catch(function(e){toast(e.message)})}function clearMap(){markers.forEach(function(m){map.removeLayer(m)});markers=[]}function renderWalks(items){clearMap();var box=document.getElementById('walks');document.getElementById('count').textContent=items.length?(items.length+' disponibili'):'nessuna per ora';if(!items.length){box.innerHTML='<div class="empty">Ancora nessuna passeggiata. Crea la prima e condividi il link con un amico.</div>';return}box.innerHTML='';items.forEach(function(w){var circle=L.circle([w.latitude,w.longitude],{radius:500,color:'#df665b',fillColor:'#ec8a81',fillOpacity:.18,weight:2}).addTo(map), marker=L.marker([w.latitude,w.longitude],{icon:L.divIcon({className:'',html:'<div style="background:#245448;color:white;width:35px;height:35px;border-radius:50%;display:grid;place-items:center;border:3px solid white;font-size:18px">'+escapeHtml(w.emoji)+'</div>',iconSize:[35,35],iconAnchor:[17,17]})}).addTo(map);markers.push(circle,marker);marker.bindPopup('<b>'+escapeHtml(w.title)+'</b><br>Zona: '+escapeHtml(w.area_label));var c=document.createElement('article');c.className='card';var action=w.is_host?'<button class="cancel" data-cancel="'+w.id+'">Annulla</button>':(w.request_status==='accepted'?'<button class="primary" data-chat="'+w.id+'">Apri chat</button>':w.request_status==='pending'?'<span class="status">Richiesta inviata</span>':'<button class="primary" data-join="'+w.id+'">Chiedi di unirti</button>');c.innerHTML='<h3>'+escapeHtml(w.title)+'</h3><p>'+escapeHtml(w.dog_name)+' '+escapeHtml(w.emoji)+' · '+escapeHtml(w.breed)+' · taglia '+escapeHtml(w.size.toLowerCase())+'</p><p>📅 '+escapeHtml(w.day)+' · '+escapeHtml(w.time)+' &nbsp; · &nbsp; fino a '+w.max_participants+' amico/i</p><p>📍 '+escapeHtml(w.area_label)+(w.reveal_exact?' <b>· luogo sbloccato</b>':' · zona approssimata')+'</p><footer><span class="status">'+escapeHtml(w.city)+'</span>'+action+'</footer>';box.appendChild(c)});box.querySelectorAll('[data-join]').forEach(function(b){b.onclick=function(){join(b.dataset.join)}})}function escapeHtml(v){return String(v||'').replace(/[&<>'"]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[x]})}function renderRequests(items){var b=document.getElementById('requestBox');if(!items.length){b.innerHTML='<strong>Richieste ricevute</strong><p class="muted">Qui compariranno le richieste per le tue passeggiate.</p>';return}b.innerHTML='<strong>Partecipanti</strong>'+items.map(function(x){var controls=x.status==='pending'?'<button data-approve="'+x.id+'" data-walk="'+x.walk_id+'">Accetta</button>':'<button data-chat="'+x.walk_id+'">Chat</button>'+(Number(x.details_released)?'<span class="muted"> indirizzo inviato</span>':'<button data-reveal="'+x.id+'" data-walk="'+x.walk_id+'">Invia indirizzo</button>');return '<div class="request"><b>'+escapeHtml(x.dog_name)+' '+escapeHtml(x.emoji)+'</b><br><span class="muted">'+escapeHtml(x.title)+'</span><br>'+controls+'</div>'}).join('');b.querySelectorAll('[data-approve]').forEach(function(b){b.onclick=function(){approve(b.dataset.walk,b.dataset.approve)}})}function join(walk){if(!profile){document.getElementById('profileDialog').showModal();return}api('/api/join',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({walk_id:walk,profile_id:profile.id,token:profile.token})}).then(function(){toast('Richiesta inviata: il luogo esatto resta nascosto finché non vieni accettato');load()}).catch(function(e){toast(e.message)})}function approve(walk,request){api('/api/requests/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({walk_id:walk,request_id:request,profile_id:profile.id,token:profile.token,action:'accepted'})}).then(function(){toast('Richiesta accettata: ora potete usare la chat');load()}).catch(function(e){toast(e.message)})}
-document.getElementById('editProfile').onclick=function(){var f=document.getElementById('profileForm');if(profile)Object.keys(profile).forEach(function(k){if(f.elements[k])f.elements[k].value=profile[k]});document.getElementById('profileDialog').showModal()};document.getElementById('profileForm').onsubmit=function(e){e.preventDefault();var d=Object.fromEntries(new FormData(e.target));d.id=profile?profile.id:id();d.token=profile?profile.token:id();api('/api/profile',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)}).then(function(){profile=d;localStorage.setItem('insieme-shared-profile',JSON.stringify(d));updateProfile();document.getElementById('profileDialog').close();toast('Profilo condiviso nella rete');load()}).catch(function(x){toast(x.message)})};document.getElementById('openWalk').onclick=function(){if(!profile){document.getElementById('profileDialog').showModal();return}document.getElementById('walkDialog').showModal()};document.querySelectorAll('[data-close]').forEach(function(b){b.onclick=function(){document.getElementById(b.dataset.close).close()}});document.querySelectorAll('[data-mode]').forEach(function(b){b.onclick=function(){selectedMode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(function(x){x.classList.toggle('active',x===b)});document.getElementById('popularFields').hidden=selectedMode!=='popular';document.getElementById('addressFields').hidden=selectedMode!=='address'}});document.getElementById('findAddress').onclick=function(){var q=document.querySelector('[name=address]').value.trim();if(!q)return toast('Inserisci un indirizzo');document.getElementById('addressResult').textContent='Ricerca in corso…';fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&q='+encodeURIComponent(q)).then(function(r){return r.json()}).then(function(a){if(!a[0])throw Error();locationChoice={label:a[0].display_name,lat:+a[0].lat,lon:+a[0].lon};document.getElementById('addressResult').textContent='Trovato: '+locationChoice.label}).catch(function(){document.getElementById('addressResult').textContent='Indirizzo non trovato: prova con città e numero civico'})};document.getElementById('walkForm').onsubmit=function(e){e.preventDefault();var d=Object.fromEntries(new FormData(e.target)),p;if(selectedMode==='popular'){p=d.popular.split('|');locationChoice={label:p[0],lat:+p[1],lon:+p[2]}}if(!locationChoice)return toast('Cerca prima l’indirizzo');api('/api/walk',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({profile_id:profile.id,token:profile.token,title:d.title,city:d.city,day:d.day,time:d.time,max:+d.max,area_label:locationChoice.label,latitude:locationChoice.lat,longitude:locationChoice.lon})}).then(function(){document.getElementById('walkDialog').close();e.target.reset();locationChoice=null;toast('Passeggiata pubblicata nella rete');load()}).catch(function(x){toast(x.message)})};updateProfile();load();
-</script><script>
-var chatWalk=null,chatTimer=null;function openChat(walk){if(!profile)return;chatWalk=walk;var d=document.getElementById('chatDialog');if(!d){d=document.createElement('dialog');d.id='chatDialog';d.className='modal';d.innerHTML='<article><h2>Chat della passeggiata</h2><p class="muted">Conoscetevi qui prima di condividere il luogo esatto.</p><div id="chatMessages" style="height:250px;overflow:auto;border:1px solid #e9ded0;border-radius:12px;padding:10px;margin:14px 0"></div><form id="chatForm" style="display:flex;gap:8px"><input name="message" maxlength="500" required placeholder="Scrivi un messaggio" style="flex:1"><button class="primary">Invia</button></form><div class="actions"><button class="cancel" type="button" id="closeChat">Chiudi</button></div></article>';document.body.appendChild(d);document.getElementById('closeChat').onclick=function(){d.close();clearInterval(chatTimer);chatTimer=null};document.getElementById('chatForm').onsubmit=function(e){e.preventDefault();var text=e.target.message.value.trim();if(!text)return;api('/api/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({walk_id:chatWalk,profile_id:profile.id,token:profile.token,text:text})}).then(function(){e.target.reset();refreshChat()}).catch(function(x){toast(x.message)})}}d.showModal();refreshChat();clearInterval(chatTimer);chatTimer=setInterval(refreshChat,8000)}function refreshChat(){if(!chatWalk||!profile)return;api('/api/messages?walk_id='+encodeURIComponent(chatWalk)+'&profile_id='+encodeURIComponent(profile.id)+'&token='+encodeURIComponent(profile.token)).then(function(data){var b=document.getElementById('chatMessages');if(!b)return;b.innerHTML=data.messages.length?data.messages.map(function(m){return '<p style="margin:0 0 9px"><b>'+escapeHtml(m.emoji)+' '+escapeHtml(m.dog_name)+'</b><br>'+escapeHtml(m.body)+'</p>'}).join(''):'<p class="muted">Nessun messaggio ancora.</p>';b.scrollTop=b.scrollHeight}).catch(function(x){toast(x.message)})}function cancelWalk(walk){if(!confirm('Annullare questa passeggiata? I partecipanti non la vedranno più.'))return;api('/api/cancel',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({walk_id:walk,profile_id:profile.id,token:profile.token})}).then(function(){toast('Passeggiata annullata');load()}).catch(function(x){toast(x.message)})}function revealAddress(walk,request){if(!confirm('Inviare ora l’indirizzo completo al partecipante?'))return;api('/api/reveal',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({walk_id:walk,request_id:request,profile_id:profile.id,token:profile.token})}).then(function(){toast('Indirizzo inviato al partecipante');load()}).catch(function(x){toast(x.message)})}document.addEventListener('click',function(e){var b=e.target.closest('[data-chat],[data-cancel],[data-reveal]');if(!b)return;if(b.dataset.chat)openChat(b.dataset.chat);if(b.dataset.cancel)cancelWalk(b.dataset.cancel);if(b.dataset.reveal)revealAddress(b.dataset.walk,b.dataset.reveal)});
-</script><script>setInterval(load,20000)</script></body></html>`;
+import { endSession, error, json, readBody, readSession, startAccount } from "./accounts.mjs";
 
-const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
-const bad = (error, status = 400) => json({ error }, status);
-const uid = () => crypto.randomUUID();
-const clean = (value, max = 80) => String(value || "").trim().slice(0, max);
 const utf8 = new TextEncoder();
+const clean = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
+const now = () => new Date().toISOString();
+
 async function maskedPoint(latitude, longitude, walkId, key) {
   const digest = new DataView(await crypto.subtle.sign("HMAC", key, utf8.encode(walkId)));
   const angle = digest.getUint32(0) / 2 ** 32 * 2 * Math.PI;
   const distance = 270 + digest.getUint32(4) / 2 ** 32 * 190;
-  return { latitude: Number(latitude) + Math.cos(angle) * distance / 111000, longitude: Number(longitude) + Math.sin(angle) * distance / (111000 * Math.cos(Number(latitude) * Math.PI / 180)) };
-}
-
-async function body(request) { try { return await request.json(); } catch { return null; } }
-async function profileOwns(env, id, token) { return Boolean(id && token && (await env.DB.prepare("SELECT id FROM profiles WHERE id = ? AND write_token = ?").bind(id, token).first())); }
-
-function viewerCredentials(request) {
   return {
-    viewerId: request.headers.get("X-Profile-Id"),
-    token: request.headers.get("Authorization")?.match(/^Bearer (\S+)$/i)?.[1],
+    latitude: latitude + Math.cos(angle) * distance / 111000,
+    longitude: longitude + Math.sin(angle) * distance / (111000 * Math.cos(latitude * Math.PI / 180)),
   };
 }
 
-async function list(env, request) {
-  const { viewerId, token } = viewerCredentials(request);
-  const viewerOk = await profileOwns(env, viewerId, token);
-  const result = await env.DB.prepare("SELECT w.id, w.host_profile_id, w.title, w.city, w.area_label, w.latitude, w.longitude, w.day, w.time, w.max_participants, p.dog_name, p.breed, p.size, p.emoji, j.status AS request_status, j.details_released FROM walks w JOIN profiles p ON p.id = w.host_profile_id LEFT JOIN join_requests j ON j.walk_id = w.id AND j.profile_id = ? WHERE w.status = 'open' ORDER BY w.day, w.time").bind(viewerOk ? viewerId : "").all();
+function accountProfile(db, accountId) {
+  return db.prepare(`
+    SELECT id, dog_name AS dog, owner_name AS owner, breed, size, energy, emoji, birth_year AS birth
+    FROM profiles WHERE account_id = ?
+  `).bind(accountId).first();
+}
+
+async function saveProfile(db, account, data) {
+  const dog = clean(data?.dog, 30), owner = clean(data?.owner, 30), breed = clean(data?.breed, 45);
+  const size = clean(data?.size, 16), energy = clean(data?.energy, 16), emoji = clean(data?.emoji, 8), birth = Number(data?.birth);
+  if (!dog || !owner || !breed || !size || !energy || !emoji || !Number.isInteger(birth) || birth < 1995 || birth > new Date().getFullYear()) {
+    return error("Completa tutti i dati del profilo.");
+  }
+  const timestamp = now();
+  await db.prepare(`
+    INSERT INTO profiles (id, account_id, write_token, dog_name, owner_name, breed, birth_year, size, energy, emoji, created_at, updated_at)
+    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(account_id) DO UPDATE SET dog_name=excluded.dog_name, owner_name=excluded.owner_name,
+      breed=excluded.breed, birth_year=excluded.birth_year, size=excluded.size, energy=excluded.energy,
+      emoji=excluded.emoji, updated_at=excluded.updated_at
+  `).bind(crypto.randomUUID(), account.id, dog, owner, breed, birth, size, energy, emoji, timestamp, timestamp).run();
+  return json({ profile: await accountProfile(db, account.id) });
+}
+
+async function listWalks(env, profileId) {
+  const [walksResult, requestsResult] = await env.DB.batch([
+    env.DB.prepare(`
+      SELECT w.id, w.host_profile_id, w.title, w.city, w.area_label, w.latitude, w.longitude, w.day, w.time, w.max_participants,
+        p.dog_name, p.breed, p.size, p.emoji, j.status AS request_status, j.details_released
+      FROM walks w JOIN profiles p ON p.id = w.host_profile_id
+      LEFT JOIN join_requests j ON j.walk_id = w.id AND j.profile_id = ?
+      WHERE w.status = 'open' AND p.account_id IS NOT NULL ORDER BY w.day, w.time
+    `).bind(profileId),
+    env.DB.prepare(`
+      SELECT j.id, j.walk_id, j.status, j.details_released, w.title, p.dog_name, p.emoji
+      FROM join_requests j JOIN walks w ON w.id = j.walk_id JOIN profiles p ON p.id = j.profile_id
+      WHERE w.host_profile_id = ? AND w.status = 'open' AND p.account_id IS NOT NULL
+        AND j.status IN ('pending','accepted') ORDER BY j.created_at DESC
+    `).bind(profileId),
+  ]);
   const maskKey = await crypto.subtle.importKey("raw", utf8.encode(env.LOCATION_MASK_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const walks = await Promise.all((result.results || []).map(async (w) => {
-    const host = viewerOk && w.host_profile_id === viewerId;
-    const accepted = w.request_status === "accepted";
-    const reveal = host || (accepted && Number(w.details_released) === 1);
+  const walks = await Promise.all(walksResult.results.map(async (walk) => {
+    const host = walk.host_profile_id === profileId;
+    const accepted = walk.request_status === "accepted";
+    const reveal = host || (accepted && Number(walk.details_released) === 1);
     const point = reveal
-      ? { latitude: w.latitude, longitude: w.longitude }
-      : await maskedPoint(w.latitude, w.longitude, w.id, maskKey);
+      ? { latitude: walk.latitude, longitude: walk.longitude }
+      : await maskedPoint(walk.latitude, walk.longitude, walk.id, maskKey);
     return {
-      id: w.id, title: w.title, city: w.city, day: w.day, time: w.time,
-      max_participants: w.max_participants, dog_name: w.dog_name,
-      breed: w.breed, size: w.size, emoji: w.emoji,
-      request_status: w.request_status, is_host: host,
-      reveal_exact: reveal, chat_ready: accepted || host,
-      area_label: reveal ? w.area_label : `${w.city} · zona approssimata`, ...point,
+      id: walk.id, title: walk.title, city: walk.city, day: walk.day, time: walk.time,
+      max_participants: walk.max_participants, dog_name: walk.dog_name, breed: walk.breed, size: walk.size, emoji: walk.emoji,
+      request_status: walk.request_status, is_host: host, reveal_exact: reveal,
+      area_label: reveal ? walk.area_label : walk.city + " · zona approssimata", ...point,
     };
   }));
-  let requests = [];
-  if (viewerOk) { const q = await env.DB.prepare("SELECT j.id, j.walk_id, j.profile_id, j.status, j.details_released, w.title, p.dog_name, p.emoji FROM join_requests j JOIN walks w ON w.id = j.walk_id JOIN profiles p ON p.id = j.profile_id WHERE w.host_profile_id = ? AND w.host_token = ? AND j.status IN ('pending','accepted') ORDER BY j.created_at DESC").bind(viewerId, token).all(); requests = q.results || []; }
-  return json({ walks, requests });
+  return json({ walks, requests: requestsResult.results });
 }
 
-async function saveProfile(env, d) {
-  if (!d) return bad("Dati mancanti");
-  const id = clean(d.id, 60), token = clean(d.token, 80), dog = clean(d.dog, 30), owner = clean(d.owner, 30), breed = clean(d.breed, 45), size = clean(d.size, 16), energy = clean(d.energy, 16), emoji = clean(d.emoji, 8), birth = Number(d.birth);
-  if (!id || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(token) || !dog || !owner || !breed || !size || !energy || !emoji || !Number.isInteger(birth) || birth < 1995 || birth > new Date().getFullYear()) return bad("Completa tutti i dati del profilo");
-  const now = new Date().toISOString(); const r = await env.DB.prepare("INSERT INTO profiles (id,write_token,dog_name,owner_name,breed,birth_year,size,energy,emoji,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET dog_name=excluded.dog_name, owner_name=excluded.owner_name, breed=excluded.breed, birth_year=excluded.birth_year, size=excluded.size, energy=excluded.energy, emoji=excluded.emoji, updated_at=excluded.updated_at WHERE profiles.write_token=excluded.write_token").bind(id, token, dog, owner, breed, birth, size, energy, emoji, now, now).run();
-  if (!r.meta.changes) return bad("Questo profilo è protetto da un altro dispositivo", 403); return json({ ok: true });
+async function createWalk(db, profileId, data) {
+  const title = clean(data?.title, 55), city = clean(data?.city, 40), area = clean(data?.area_label, 140);
+  const day = clean(data?.day, 12), time = clean(data?.time, 8);
+  const max = Math.min(3, Math.max(1, Math.trunc(Number(data?.max)) || 1));
+  const latitude = data?.latitude, longitude = data?.longitude;
+  if (!title || !city || !area || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time)
+    || !Number.isFinite(latitude) || Math.abs(latitude) >= 89 || !Number.isFinite(longitude) || Math.abs(longitude) > 180) {
+    return error("Controlla i dati della passeggiata.");
+  }
+  await db.prepare(`
+    INSERT INTO walks (id, host_profile_id, host_token, title, city, area_label, latitude, longitude, day, time, max_participants, created_at)
+    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(crypto.randomUUID(), profileId, title, city, area, latitude, longitude, day, time, max, now()).run();
+  return json({ ok: true }, 201);
 }
 
-async function createWalk(env, d) {
-  if (!d || !(await profileOwns(env, d.profile_id, d.token))) return bad("Crea prima il tuo profilo", 403);
-  const title = clean(d.title, 55), city = clean(d.city, 40), area = clean(d.area_label, 140), day = clean(d.day, 12), time = clean(d.time, 8), max = Math.min(3, Math.max(1, Number(d.max) || 1)), lat = Number(d.latitude), lon = Number(d.longitude);
-  if (!title || !city || !area || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time) || !Number.isFinite(lat) || Math.abs(lat) >= 89 || !Number.isFinite(lon) || Math.abs(lon) > 180) return bad("Controlla i dati della passeggiata");
-  await env.DB.prepare("INSERT INTO walks (id,host_profile_id,host_token,title,city,area_label,latitude,longitude,day,time,max_participants,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(uid(), d.profile_id, d.token, title, city, area, lat, lon, day, time, max, new Date().toISOString()).run(); return json({ ok: true });
+async function joinWalk(db, profileId, walkId) {
+  const joined = await db.prepare(`
+    INSERT INTO join_requests (id, walk_id, profile_id, created_at)
+    SELECT ?, w.id, ?, ? FROM walks w JOIN profiles p ON p.id = w.host_profile_id
+    WHERE w.id = ? AND w.status = 'open' AND w.host_profile_id != ? AND p.account_id IS NOT NULL
+    ON CONFLICT(walk_id, profile_id) DO NOTHING
+  `).bind(crypto.randomUUID(), profileId, now(), walkId, profileId).run();
+  return joined.meta.changes ? json({ ok: true }, 201) : error("La richiesta è già stata inviata o la passeggiata non è disponibile.", 409);
 }
 
-async function canChat(env, walkId, profileId, token) {
-  if (!(await profileOwns(env, profileId, token))) return false;
-  const host = await env.DB.prepare("SELECT id FROM walks WHERE id = ? AND host_profile_id = ? AND host_token = ? AND status = 'open'").bind(walkId, profileId, token).first();
-  if (host) return true;
-  return Boolean(await env.DB.prepare("SELECT j.id FROM join_requests j JOIN walks w ON w.id = j.walk_id WHERE j.walk_id = ? AND j.profile_id = ? AND j.status = 'accepted' AND w.status = 'open'").bind(walkId, profileId).first());
+async function updateJoin(db, profileId, walkId, requestId, reveal) {
+  const result = await db.prepare(reveal ? `
+    UPDATE join_requests SET details_released = 1
+    WHERE id = ? AND walk_id = ? AND status = 'accepted'
+      AND EXISTS (SELECT 1 FROM walks WHERE id = ? AND host_profile_id = ? AND status = 'open')
+  ` : `
+    UPDATE join_requests SET status = 'accepted'
+    WHERE id = ? AND walk_id = ? AND status = 'pending'
+      AND EXISTS (
+        SELECT 1 FROM walks w WHERE w.id = ? AND w.host_profile_id = ? AND w.status = 'open'
+        AND (SELECT COUNT(*) FROM join_requests j WHERE j.walk_id = w.id AND j.status = 'accepted') < w.max_participants
+      )
+  `).bind(requestId, walkId, walkId, profileId).run();
+  return result.meta.changes ? json({ ok: true }) : error("Questa richiesta non è disponibile o la passeggiata è al completo.", 409);
 }
 
-async function messages(env, request, url) {
-  const walkId = clean(url.searchParams.get("walk_id"), 60);
-  const { viewerId: profileId, token } = viewerCredentials(request);
-  if (!(await canChat(env, walkId, profileId, token))) return bad("La chat si apre dopo l'accettazione", 403);
-  const rows = await env.DB.prepare("SELECT m.id, m.body, m.created_at, p.dog_name, p.emoji, m.sender_profile_id FROM messages m JOIN profiles p ON p.id = m.sender_profile_id WHERE m.walk_id = ? ORDER BY m.created_at ASC LIMIT 100").bind(walkId).all();
-  return json({ messages: rows.results || [] });
+async function cancelWalk(db, profileId, walkId) {
+  const result = await db.prepare("UPDATE walks SET status = 'cancelled' WHERE id = ? AND host_profile_id = ? AND status = 'open'").bind(walkId, profileId).run();
+  return result.meta.changes ? json({ ok: true }) : error("Passeggiata non annullabile.", 403);
 }
 
-async function handleApi(request, env) {
-  const url = new URL(request.url);
-  if (!env.DB || !env.LOCATION_MASK_KEY) return bad("Archivio online non disponibile", 503);
-  if (request.method === "GET" && url.pathname === "/api/walks") return list(env, request);
-  if (request.method === "POST" && url.pathname === "/api/profile") return saveProfile(env, await body(request));
-  if (request.method === "POST" && url.pathname === "/api/walk") return createWalk(env, await body(request));
-  if (request.method === "POST" && url.pathname === "/api/join") { const d = await body(request); if (!d || !(await profileOwns(env, d.profile_id, d.token))) return bad("Profilo non valido", 403); try { await env.DB.prepare("INSERT INTO join_requests (id,walk_id,profile_id,created_at) VALUES (?,?,?,?)").bind(uid(), clean(d.walk_id, 60), d.profile_id, new Date().toISOString()).run(); return json({ ok: true }); } catch { return bad("Hai già inviato una richiesta"); } }
-  if (request.method === "POST" && url.pathname === "/api/requests/action") { const d = await body(request); if (!d || !(await profileOwns(env, d.profile_id, d.token))) return bad("Profilo non valido", 403); const owns = await env.DB.prepare("SELECT id FROM walks WHERE id = ? AND host_profile_id = ? AND host_token = ?").bind(clean(d.walk_id, 60), d.profile_id, d.token).first(); if (!owns) return bad("Non puoi gestire questa richiesta", 403); await env.DB.prepare("UPDATE join_requests SET status = 'accepted' WHERE id = ? AND walk_id = ?").bind(clean(d.request_id, 60), clean(d.walk_id, 60)).run(); return json({ ok: true }); }
-  if (request.method === "POST" && url.pathname === "/api/cancel") { const d = await body(request); if (!d || !(await profileOwns(env, d.profile_id, d.token))) return bad("Profilo non valido", 403); const r = await env.DB.prepare("UPDATE walks SET status = 'cancelled' WHERE id = ? AND host_profile_id = ? AND host_token = ? AND status = 'open'").bind(clean(d.walk_id, 60), d.profile_id, d.token).run(); return r.meta.changes ? json({ ok: true }) : bad("Passeggiata non annullabile", 403); }
-  if (request.method === "POST" && url.pathname === "/api/reveal") { const d = await body(request); if (!d || !(await profileOwns(env, d.profile_id, d.token))) return bad("Profilo non valido", 403); const owns = await env.DB.prepare("SELECT id FROM walks WHERE id = ? AND host_profile_id = ? AND host_token = ? AND status = 'open'").bind(clean(d.walk_id, 60), d.profile_id, d.token).first(); if (!owns) return bad("Non puoi condividere questo indirizzo", 403); await env.DB.prepare("UPDATE join_requests SET details_released = 1 WHERE walk_id = ? AND id = ? AND status = 'accepted'").bind(clean(d.walk_id, 60), clean(d.request_id, 60)).run(); return json({ ok: true }); }
-  if (request.method === "GET" && url.pathname === "/api/messages") return messages(env, request, url);
-  if (request.method === "POST" && url.pathname === "/api/messages") { const d = await body(request), walkId = clean(d?.walk_id, 60), text = clean(d?.text, 500); if (!d || !text || !(await canChat(env, walkId, d.profile_id, d.token))) return bad("Messaggio non disponibile", 403); await env.DB.prepare("INSERT INTO messages (id,walk_id,sender_profile_id,body,created_at) VALUES (?,?,?,?,?)").bind(uid(), walkId, d.profile_id, text, new Date().toISOString()).run(); return json({ ok: true }); }
-  return new Response("Not found", { status: 404 });
+async function canChat(db, walkId, profileId) {
+  return Boolean(await db.prepare(`
+    SELECT w.id FROM walks w WHERE w.id = ? AND w.status = 'open'
+      AND (w.host_profile_id = ? OR EXISTS (
+        SELECT 1 FROM join_requests j WHERE j.walk_id = w.id AND j.profile_id = ? AND j.status = 'accepted'
+      ))
+  `).bind(walkId, profileId, profileId).first());
+}
+
+async function readMessages(db, walkId, profileId) {
+  if (!await canChat(db, walkId, profileId)) return error("La chat si apre dopo l’accettazione.", 403);
+  const rows = await db.prepare(`
+    SELECT m.id, m.body, m.created_at, p.dog_name, p.emoji
+    FROM messages m JOIN profiles p ON p.id = m.sender_profile_id
+    WHERE m.walk_id = ? ORDER BY m.created_at DESC, m.id DESC LIMIT 100
+  `).bind(walkId).all();
+  return json({ messages: rows.results.reverse() });
+}
+
+async function sendMessage(db, walkId, profileId, data) {
+  const message = clean(data?.text, 500);
+  if (!message) return error("Scrivi un messaggio.");
+  if (!await canChat(db, walkId, profileId)) return error("Chat non disponibile.", 403);
+  await db.prepare("INSERT INTO messages (id, walk_id, sender_profile_id, body, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), walkId, profileId, message, now()).run();
+  return json({ ok: true }, 201);
+}
+
+async function handle(request, env, url) {
+  if (!env.DB || !env.LOCATION_MASK_KEY) return error("Archivio online non disponibile.", 503);
+  const endpoint = request.method + " " + url.pathname;
+  if (endpoint === "POST /api/auth/register") return startAccount(request, env, true);
+  if (endpoint === "POST /api/auth/login") return startAccount(request, env, false);
+
+  const db = env.DB;
+  const account = await readSession(request, db);
+  if (!account) return error("Accedi al tuo account per continuare.", 401);
+  if (endpoint === "POST /api/auth/logout") return endSession(db, account);
+  if (endpoint === "GET /api/auth/me") return json({ username: account.username, profile: await accountProfile(db, account.id) });
+  if (endpoint === "POST /api/profile") return saveProfile(db, account, await readBody(request));
+
+  const profileId = account.profileId;
+  if (!profileId) return error("Crea il profilo del tuo cane per continuare.", 403);
+  if (endpoint === "GET /api/walks") return listWalks(env, profileId);
+  if (endpoint === "GET /api/messages") return readMessages(db, clean(url.searchParams.get("walk_id"), 60), profileId);
+
+  const data = request.method === "POST" ? await readBody(request) : null;
+  const walkId = clean(data?.walk_id, 60);
+  const requestId = clean(data?.request_id, 60);
+  switch (endpoint) {
+    case "POST /api/walk": return createWalk(db, profileId, data);
+    case "POST /api/join": return joinWalk(db, profileId, walkId);
+    case "POST /api/requests/action": return updateJoin(db, profileId, walkId, requestId, false);
+    case "POST /api/reveal": return updateJoin(db, profileId, walkId, requestId, true);
+    case "POST /api/cancel": return cancelWalk(db, profileId, walkId);
+    case "POST /api/messages": return sendMessage(db, walkId, profileId, data);
+    default: return error("Risorsa non trovata.", 404);
+  }
 }
 
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin");
-    if (origin && origin !== env.PAGES_ORIGIN) return bad("Origine non autorizzata", 403);
+    if (origin && origin !== env.PAGES_ORIGIN) return error("Origine non autorizzata.", 403);
     const cors = new Headers({ Vary: "Origin" });
     if (origin) cors.set("Access-Control-Allow-Origin", origin);
     if (request.method === "OPTIONS") {
       cors.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      cors.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Profile-Id");
+      cors.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
       return new Response(null, { status: 204, headers: cors });
     }
+    const url = new URL(request.url);
     let response;
     try {
-      response = await handleApi(request, env);
+      response = await handle(request, env, url);
     } catch {
-      response = bad("Servizio temporaneamente non disponibile", 500);
+      console.error(JSON.stringify({ event: "api_error", path: url.pathname, method: request.method }));
+      response = error("Servizio temporaneamente non disponibile.", 500);
     }
     for (const [name, value] of cors) response.headers.set(name, value);
     return response;
-  }
+  },
 };

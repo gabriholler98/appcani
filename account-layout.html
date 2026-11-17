@@ -1,0 +1,52 @@
+<main class="account-screen" id="accountScreen" aria-labelledby="accountHeading">
+  <div class="account-card">
+    <div class="brand">
+      <img src="./assets/dogs-in-giro-logo.png" width="2148" height="732" alt="Dogs in Giro">
+    </div>
+    <p class="account-loading" id="accountLoading" role="status">Caricamento…</p>
+    <div id="accountEntry" hidden>
+      <div class="account-tabs" role="group" aria-label="Accedi o registrati">
+        <button type="button" id="chooseLogin" aria-pressed="true">Accedi</button>
+        <button type="button" id="chooseRegister" aria-pressed="false">Registrati</button>
+      </div>
+      <h1 id="accountHeading">Accedi al tuo account</h1>
+      <form class="account-form" id="accountForm">
+        <label>Nome utente
+          <input name="username" required minlength="3" maxlength="24" pattern="[a-zA-Z0-9._\-]{3,24}"
+            autocomplete="username" autocapitalize="none" spellcheck="false" aria-describedby="accountHint">
+        </label>
+        <p id="accountHint" class="muted" hidden>Da 3 a 24 caratteri. Puoi usare lettere, numeri, punti, trattini e underscore.</p>
+        <label>Password
+          <input name="password" required type="password" maxlength="128" autocomplete="current-password" aria-describedby="passwordHint">
+        </label>
+        <p id="passwordHint" class="muted" hidden>Usa almeno 12 caratteri.</p>
+        <label class="account-checkbox">
+          <input type="checkbox" id="showPassword"> Mostra password
+        </label>
+        <p class="account-error" id="accountError" role="alert" hidden></p>
+        <button class="primary account-submit" id="submitAccount" type="submit">Accedi</button>
+      </form>
+    </div>
+    <section id="accountSetup" aria-labelledby="setupHeading" hidden>
+      <h1 id="setupHeading">Crea il profilo del tuo cane</h1>
+      <p class="muted">Completa il profilo per organizzare passeggiate, inviare richieste e chattare.</p>
+      <div class="account-actions">
+        <button class="primary" type="button" id="createAccountProfile">Crea profilo</button>
+        <button class="outline" type="button" data-logout>Esci</button>
+      </div>
+    </section>
+  </div>
+  <noscript>Attiva JavaScript per accedere a Dogs in Giro.</noscript>
+</main>
+<dialog class="modal" id="chatDialog" aria-labelledby="chatHeading">
+  <article>
+    <h2 id="chatHeading">Chat della passeggiata</h2>
+    <p class="muted">Conoscetevi qui prima di condividere il luogo esatto.</p>
+    <div id="chatMessages" class="chat-messages" role="log"></div>
+    <form id="chatForm" class="chat-form">
+      <input name="message" aria-label="Messaggio" maxlength="500" required placeholder="Scrivi un messaggio">
+      <button class="primary" type="submit">Invia</button>
+    </form>
+    <div class="actions"><button class="cancel" type="button" data-close="chatDialog">Chiudi</button></div>
+  </article>
+</dialog>
