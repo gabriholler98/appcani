@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "Dogs in Giro",
+  "short_name": "Dogs in Giro",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f8f6",
+  "theme_color": "#f5f8f6",
+  "icons": [
+    {
+      "src": "assets/dogs-in-giro-miniatura-light.png?v=2",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -4,13 +4,14 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { passwordProof } from "../docs/assets/account-client.js";
 import worker from "../worker.mjs";
+import { deliverPush } from "../notifications.mjs";
 import { walkTiming } from "../walk-time.mjs";
 
 const origin = "https://gabriholler98.github.io";
 
 function database() {
   const sqlite = new DatabaseSync(":memory:");
-  for (const migration of ["0000_shared_walks", "0001_chat_and_reveal", "0002_accounts", "0003_walk_archive"]) {
+  for (const migration of ["0000_shared_walks", "0001_chat_and_reveal", "0002_accounts", "0003_walk_archive", "0004_notifications"]) {
     sqlite.exec(readFileSync(new URL("../drizzle/" + migration + ".sql", import.meta.url), "utf8"));
   }
   const db = {
@@ -64,6 +65,8 @@ test("account required, data follows the account and chat stays private", async 
   await call("walks/archive?filter=created", { status: 401 });
   await call("profile", { data: profile, status: 401 });
   const { token: host } = await call("auth/register", { data: { username, proof }, status: 201 });
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  env.VAPID_PRIVATE_JWK = JSON.stringify(await crypto.subtle.exportKey("jwk", pair.privateKey));
   await call("auth/register", { data: { username: "WALKER.ONE", proof }, status: 409 });
   await call("walks", { token: host, status: 403 });
   assert.equal((await call("auth/me", { token: host })).profile, null);
@@ -71,6 +74,28 @@ test("account required, data follows the account and chat stays private", async 
   const databaseProfile = sqlite.prepare("SELECT write_token, account_id FROM profiles WHERE id = ?").get(hostProfile.id);
   assert.equal(databaseProfile.write_token, "");
   const account = sqlite.prepare("SELECT password_hash, password_salt FROM accounts WHERE id = ?").get(databaseProfile.account_id);
+  const device = { endpoint: "https://fcm.googleapis.com/fcm/send/local-test-only" };
+  await call("notifications/device/enable", { token: host, data: { endpoint: "https://invalid.example/" }, status: 400 });
+  await call("notifications/device/enable", { token: host, data: device });
+  const { key } = await call("notifications/push-settings", { token: host });
+  assert.equal(Buffer.from(key, "base64url").length, 65);
+  let deliveries = 0;
+  await deliverPush(env, [databaseProfile.account_id], async (url, options) => {
+    deliveries += 1;
+    assert.equal(url, device.endpoint);
+    assert.equal(options.method, "POST");
+    assert.equal(options.body, undefined);
+    const [jwt, publicKey] = options.headers.Authorization.slice("vapid t=".length).split(", k=");
+    assert.equal(publicKey, key);
+    const [header, claims, signature] = jwt.split(".");
+    assert.equal(JSON.parse(Buffer.from(claims, "base64url")).aud, "https://fcm.googleapis.com");
+    assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pair.publicKey,
+      Buffer.from(signature, "base64url"), new TextEncoder().encode(header + "." + claims)));
+    return new Response(null, { status: 410 });
+  });
+  assert.equal(deliveries, 1);
+  assert.equal((await call("notifications/device/check", { token: host, data: device })).enabled, false);
+  await call("notifications/device/enable", { token: host, data: device });
   assert.notEqual(account.password_hash, proof);
   assert.equal(account.password_salt.length, 32);
   assert.equal(sqlite.prepare("SELECT count(*) AS total FROM account_sessions WHERE token_hash = ?").get(host).total, 0);
@@ -95,9 +120,17 @@ test("account required, data follows the account and chat stays private", async 
   const nameGuest = "walker.two";
   const { token: guest } = await call("auth/register", { data: { username: nameGuest, proof: await passwordProof(nameGuest, "password-differente") }, status: 201 });
   await call("profile", { token: guest, data: { ...profile, dog: "Bruno", id: hostProfile.id } });
+  assert.equal((await call("notifications/device/check", { token: guest, data: device })).enabled, false);
   assert.notEqual((await call("auth/me", { token: guest })).profile.id, hostProfile.id);
   assert.notEqual((await call("walks", { token: guest })).walks[0].latitude, walk.latitude);
   await call("join", { token: guest, data: { walk_id: walk.id }, status: 201 });
+  assert.equal((await call("walks", { token: host })).unread_notifications, 1);
+  assert.equal((await call("notifications", { token: guest })).unread, 0);
+  const hostInbox = await call("notifications", { token: host });
+  assert.equal(hostInbox.items[0].kind, "join");
+  await call("notifications/read", { token: guest, data: { through: hostInbox.items[0].id } });
+  assert.equal((await call("notifications", { token: host })).unread, 1);
+  assert.equal((await call("notifications/read", { token: host, data: { through: hostInbox.items[0].id } })).unread, 0);
   await call("messages?walk_id=" + walk.id, { token: guest, status: 403 });
   const [pending] = (await call("walks", { token: secondDevice })).requests;
   const data = { walk_id: walk.id, request_id: pending.id };
@@ -106,6 +139,10 @@ test("account required, data follows the account and chat stays private", async 
   assert.equal((await call("walks", { token: guest })).walks[0].reveal_exact, false);
   await call("messages", { token: guest, data: { walk_id: walk.id, text: "Ciao!" }, status: 201 });
   assert.equal((await call("messages?walk_id=" + walk.id, { token: secondDevice })).messages[0].body, "Ciao!");
+  assert.equal((await call("notifications", { token: guest })).items[0].kind, "accepted");
+  assert.equal((await call("notifications", { token: host })).items[0].kind, "chat");
+  await call("messages", { token: guest, data: { walk_id: walk.id, text: "Ci vediamo." }, status: 201 });
+  assert.equal((await call("notifications", { token: secondDevice })).unread, 1);
   await call("reveal", { token: host, data });
   assert.equal((await call("walks", { token: guest })).walks[0].area_label, "Punto di ritrovo");
   const waitingName = "walker.three";
@@ -133,14 +170,17 @@ test("account required, data follows the account and chat stays private", async 
   await call("walks/delete", { token: host, data });
   assert.deepEqual((await call("walks/archive?filter=attended", { token: guest })).walks, []);
   await call("messages?walk_id=" + walk.id, { token: guest, status: 403 });
-  for (const table of ["walks", "messages", "join_requests"]) {
+  for (const table of ["walks", "messages", "join_requests", "notifications"]) {
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS total FROM " + table).get().total, 0);
   }
   await call("auth/logout", { token: host, method: "POST" });
+  assert.equal((await call("notifications/device/check", { token: secondDevice, data: device })).enabled, false);
   await call("auth/me", { token: host, status: 401 });
   await call("walk", { token: secondDevice, status: 201, data: walkInput });
   const [cancelled] = (await call("walks", { token: secondDevice })).walks;
+  await call("join", { token: guest, data: { walk_id: cancelled.id }, status: 201 });
   await call("cancel", { token: secondDevice, data: { walk_id: cancelled.id } });
+  assert.equal((await call("notifications", { token: guest })).items[0].kind, "cancelled");
   assert.deepEqual((await call("walks", { token: guest })).walks, []);
   assert.equal((await call("walks/archive?filter=created", { token: secondDevice })).walks[0].status, "cancelled");
   await call("auth/me", { token: guest, source: "https://untrusted.invalid", status: 403 });

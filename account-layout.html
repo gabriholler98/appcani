@@ -36,6 +36,21 @@
   </div>
   <noscript>Attiva JavaScript per accedere a Dogs in Giro.</noscript>
 </main>
+<dialog class="modal archive-modal" id="notificationsDialog" aria-labelledby="notificationsHeading">
+  <article>
+    <h2 id="notificationsHeading">Notifiche</h2>
+    <p id="notificationsStatus" class="muted" role="status" hidden></p>
+    <ul id="notificationsList" class="notification-list"></ul>
+    <div class="notification-settings">
+      <button class="outline" type="button" id="pushToggle" disabled>Attiva notifiche push</button>
+      <p id="pushHelp" class="muted" role="status"></p>
+    </div>
+    <div class="actions">
+      <button class="cancel" type="button" data-close="notificationsDialog">Chiudi</button>
+      <button class="outline" type="button" id="markNotificationsRead" disabled>Segna come lette</button>
+    </div>
+  </article>
+</dialog>
 <dialog class="modal archive-modal" id="archiveDialog" aria-labelledby="archiveHeading">
   <article>
     <h2 id="archiveHeading">Le mie passeggiate</h2>

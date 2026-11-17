@@ -1,4 +1,5 @@
-import { setupAccounts } from "./account-client.js";
+import { setupAccounts } from "./account-client.js?v=3";
+import { currentPushEndpoint, setupNotifications } from "./notification-client.js";
 
 const byId = id => document.getElementById(id);
 const app = byId("appView");
@@ -19,8 +20,9 @@ const archive = byId("archiveDialog");
 const archiveFilters = document.querySelectorAll("[data-archive-filter]");
 let archiveFilter = "created";
 
-const accounts = setupAccounts({ openProfile, showApp, closeApp });
+const accounts = setupAccounts({ openProfile, showApp, closeApp, currentPushEndpoint });
 const api = accounts.api;
+const notifications = setupNotifications(api);
 
 function announce(message) {
   const toast = byId("toast");
@@ -56,6 +58,12 @@ function showApp(profile) {
   }
   map?.invalidateSize();
   void loadWalks();
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("avvisi") === "1") {
+    url.searchParams.delete("avvisi");
+    history.replaceState(history.state, "", url);
+    notifications.open();
+  }
 }
 
 function closeApp() {
@@ -63,6 +71,7 @@ function closeApp() {
   loadId += 1;
   app.hidden = true;
   for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
+  notifications.reset();
   clearInterval(chatTimer);
   selectedWalk = null;
   walkForm.reset();
@@ -104,13 +113,14 @@ function durationLabel(minutes) {
 }
 
 async function loadWalks() {
-  if (!currentProfile) return;
+  if (!currentProfile || document.hidden) return;
   const id = ++loadId;
   try {
     const data = await api("/api/walks");
     if (id !== loadId) return;
     showWalks(data.walks);
     showRequests(data.requests);
+    notifications.updateUnread(data.unread_notifications);
   } catch (failure) {
     if (id === loadId && currentProfile) announce(failure.message);
   }
@@ -218,7 +228,7 @@ function renderArchive(walks) {
 }
 
 async function loadArchive() {
-  if (!currentProfile || !archive.open) return;
+  if (!currentProfile || !archive.open || document.hidden) return;
   const load = ++archiveLoadId;
   try {
     const { walks } = await api("/api/walks/archive?filter=" + encodeURIComponent(archiveFilter));
@@ -357,7 +367,7 @@ chat.onclose = () => {
 
 async function refreshChat() {
   const walk = selectedWalk;
-  if (!walk || !currentProfile) return;
+  if (!walk || !currentProfile || document.hidden) return;
   try {
     const { messages, read_only } = await api("/api/messages?walk_id=" + encodeURIComponent(walk));
     if (!chat.open || selectedWalk !== walk) return;
@@ -403,8 +413,15 @@ chatForm.onsubmit = async event => {
   }
 };
 
-setInterval(() => {
+function refreshHome() {
   void loadWalks();
   if (archive.open && !chat.open) void loadArchive();
-}, 20000);
+}
+
+setInterval(refreshHome, 20000);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  refreshHome();
+  if (chat.open) void refreshChat();
+});
 void accounts.restore();

@@ -1,5 +1,6 @@
 import { endSession, error, json, readBody, readSession, startAccount } from "./accounts.mjs";
 import { defaultDuration, walkTiming } from "./walk-time.mjs";
+import { changeDevice, commitNotification, forgetLogoutDevice, listNotifications, markNotificationsRead, pushSettings, unreadQuery } from "./notifications.mjs";
 
 const utf8 = new TextEncoder();
 const clean = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -40,9 +41,9 @@ async function saveProfile(db, account, data) {
   return json({ profile: await accountProfile(db, account.id) });
 }
 
-async function listWalks(env, profileId) {
+async function listWalks(env, profileId, accountId) {
   const currentTime = nowSeconds();
-  const [walksResult, requestsResult] = await env.DB.batch([
+  const [walksResult, requestsResult, unreadResult] = await env.DB.batch([
     env.DB.prepare(`
       SELECT w.id, w.host_profile_id, w.title, w.city, w.area_label, w.latitude, w.longitude, w.day, w.time, w.max_participants, w.duration_minutes, w.ends_at,
         p.dog_name, p.breed, p.size, p.emoji, j.status AS request_status, j.details_released
@@ -56,6 +57,7 @@ async function listWalks(env, profileId) {
       WHERE w.host_profile_id = ? AND w.status = 'open' AND w.ends_at > ? AND p.account_id IS NOT NULL
         AND j.status IN ('pending','accepted') ORDER BY j.created_at DESC
     `).bind(profileId, currentTime),
+    unreadQuery(env.DB, accountId),
   ]);
   const maskKey = await crypto.subtle.importKey("raw", utf8.encode(env.LOCATION_MASK_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const walks = await Promise.all(walksResult.results.map(async (walk) => {
@@ -73,7 +75,7 @@ async function listWalks(env, profileId) {
       area_label: reveal ? walk.area_label : walk.city + " · zona approssimata", ...point,
     };
   }));
-  return json({ walks, requests: requestsResult.results });
+  return json({ walks, requests: requestsResult.results, unread_notifications: unreadResult.results[0].unread });
 }
 
 async function archiveWalks(db, profileId, filter) {
@@ -119,18 +121,19 @@ async function createWalk(db, profileId, data) {
   return json({ ok: true }, 201);
 }
 
-async function joinWalk(db, profileId, walkId) {
-  const joined = await db.prepare(`
+async function joinWalk(env, ctx, profileId, walkId) {
+  const mutation = env.DB.prepare(`
     INSERT INTO join_requests (id, walk_id, profile_id, created_at)
     SELECT ?, w.id, ?, ? FROM walks w JOIN profiles p ON p.id = w.host_profile_id
     WHERE w.id = ? AND w.status = 'open' AND w.host_profile_id != ? AND p.account_id IS NOT NULL AND w.ends_at > ?
     ON CONFLICT(walk_id, profile_id) DO NOTHING
-  `).bind(crypto.randomUUID(), profileId, now(), walkId, profileId, nowSeconds()).run();
+  `).bind(crypto.randomUUID(), profileId, now(), walkId, profileId, nowSeconds());
+  const joined = await commitNotification(env, ctx, mutation, "join", walkId, walkId);
   return joined.meta.changes ? json({ ok: true }, 201) : error("La richiesta è già stata inviata o la passeggiata non è disponibile.", 409);
 }
 
-async function updateJoin(db, profileId, walkId, requestId, reveal) {
-  const result = await db.prepare(reveal ? `
+async function updateJoin(env, ctx, profileId, walkId, requestId, reveal) {
+  const mutation = env.DB.prepare(reveal ? `
     UPDATE join_requests SET details_released = 1
     WHERE id = ? AND walk_id = ? AND status = 'accepted'
       AND EXISTS (SELECT 1 FROM walks WHERE id = ? AND host_profile_id = ? AND status = 'open' AND ends_at > ?)
@@ -141,12 +144,15 @@ async function updateJoin(db, profileId, walkId, requestId, reveal) {
         SELECT 1 FROM walks w WHERE w.id = ? AND w.host_profile_id = ? AND w.status = 'open' AND w.ends_at > ?
         AND (SELECT COUNT(*) FROM join_requests j WHERE j.walk_id = w.id AND j.status = 'accepted') < w.max_participants
       )
-  `).bind(requestId, walkId, walkId, profileId, nowSeconds()).run();
+  `).bind(requestId, walkId, walkId, profileId, nowSeconds());
+  const result = reveal ? await mutation.run() : await commitNotification(env, ctx, mutation, "accepted", walkId, walkId, requestId);
   return result.meta.changes ? json({ ok: true }) : error("Questa richiesta non è disponibile o la passeggiata è al completo.", 409);
 }
 
-async function cancelWalk(db, profileId, walkId) {
-  const result = await db.prepare("UPDATE walks SET status = 'cancelled' WHERE id = ? AND host_profile_id = ? AND status = 'open' AND ends_at > ?").bind(walkId, profileId, nowSeconds()).run();
+async function cancelWalk(env, ctx, profileId, walkId) {
+  const mutation = env.DB.prepare("UPDATE walks SET status = 'cancelled' WHERE id = ? AND host_profile_id = ? AND status = 'open' AND ends_at > ?")
+    .bind(walkId, profileId, nowSeconds());
+  const result = await commitNotification(env, ctx, mutation, "cancelled", walkId, walkId);
   return result.meta.changes ? json({ ok: true }) : error("Passeggiata non annullabile.", 403);
 }
 
@@ -184,20 +190,21 @@ async function readMessages(db, walkId, profileId) {
   return json({ messages: rows.results.reverse(), read_only: walk.ends_at <= nowSeconds() });
 }
 
-async function sendMessage(db, walkId, profileId, data) {
+async function sendMessage(env, ctx, walkId, profileId, data) {
   const message = clean(data?.text, 500);
   if (!message) return error("Scrivi un messaggio.");
-  const result = await db.prepare(`
+  const mutation = env.DB.prepare(`
     INSERT INTO messages (id, walk_id, sender_profile_id, body, created_at)
     SELECT ?, w.id, ?, ?, ? FROM walks w WHERE w.id = ? AND w.status = 'open' AND w.ends_at > ?
       AND (w.host_profile_id = ? OR EXISTS (
         SELECT 1 FROM join_requests j WHERE j.walk_id = w.id AND j.profile_id = ? AND j.status = 'accepted'
       ))
-  `).bind(crypto.randomUUID(), profileId, message, now(), walkId, nowSeconds(), profileId, profileId).run();
+  `).bind(crypto.randomUUID(), profileId, message, now(), walkId, nowSeconds(), profileId, profileId);
+  const result = await commitNotification(env, ctx, mutation, "chat", walkId, walkId, profileId, walkId, profileId);
   return result.meta.changes ? json({ ok: true }, 201) : error("La chat è archiviata o non è disponibile.", 403);
 }
 
-async function handle(request, env, url) {
+async function handle(request, env, url, ctx) {
   if (!env.DB || !env.LOCATION_MASK_KEY) return error("Archivio online non disponibile.", 503);
   const endpoint = request.method + " " + url.pathname;
   if (endpoint === "POST /api/auth/register") return startAccount(request, env, true);
@@ -206,33 +213,42 @@ async function handle(request, env, url) {
   const db = env.DB;
   const account = await readSession(request, db);
   if (!account) return error("Accedi al tuo account per continuare.", 401);
-  if (endpoint === "POST /api/auth/logout") return endSession(db, account);
+  if (endpoint === "POST /api/auth/logout") {
+    await forgetLogoutDevice(db, account, await readBody(request));
+    return endSession(db, account);
+  }
   if (endpoint === "GET /api/auth/me") return json({ username: account.username, profile: await accountProfile(db, account.id) });
   if (endpoint === "POST /api/profile") return saveProfile(db, account, await readBody(request));
 
   const profileId = account.profileId;
   if (!profileId) return error("Crea il profilo del tuo cane per continuare.", 403);
-  if (endpoint === "GET /api/walks") return listWalks(env, profileId);
+  if (endpoint === "GET /api/walks") return listWalks(env, profileId, account.id);
   if (endpoint === "GET /api/walks/archive") return archiveWalks(db, profileId, url.searchParams.get("filter"));
   if (endpoint === "GET /api/messages") return readMessages(db, clean(url.searchParams.get("walk_id"), 60), profileId);
+  if (endpoint === "GET /api/notifications") return listNotifications(db, account.id);
+  if (endpoint === "GET /api/notifications/push-settings") return pushSettings(env);
 
   const data = request.method === "POST" ? await readBody(request) : null;
   const walkId = clean(data?.walk_id, 60);
   const requestId = clean(data?.request_id, 60);
   switch (endpoint) {
     case "POST /api/walk": return createWalk(db, profileId, data);
-    case "POST /api/join": return joinWalk(db, profileId, walkId);
-    case "POST /api/requests/action": return updateJoin(db, profileId, walkId, requestId, false);
-    case "POST /api/reveal": return updateJoin(db, profileId, walkId, requestId, true);
-    case "POST /api/cancel": return cancelWalk(db, profileId, walkId);
+    case "POST /api/join": return joinWalk(env, ctx, profileId, walkId);
+    case "POST /api/requests/action": return updateJoin(env, ctx, profileId, walkId, requestId, false);
+    case "POST /api/reveal": return updateJoin(env, ctx, profileId, walkId, requestId, true);
+    case "POST /api/cancel": return cancelWalk(env, ctx, profileId, walkId);
     case "POST /api/walks/delete": return deleteArchivedWalk(db, profileId, walkId);
-    case "POST /api/messages": return sendMessage(db, walkId, profileId, data);
+    case "POST /api/messages": return sendMessage(env, ctx, walkId, profileId, data);
+    case "POST /api/notifications/read": return markNotificationsRead(db, account.id, data);
+    case "POST /api/notifications/device/check": return changeDevice(env, account, data, "check");
+    case "POST /api/notifications/device/enable": return changeDevice(env, account, data, "enable");
+    case "POST /api/notifications/device/disable": return changeDevice(env, account, data, "disable");
     default: return error("Risorsa non trovata.", 404);
   }
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const origin = request.headers.get("Origin");
     if (origin && origin !== env.PAGES_ORIGIN) return error("Origine non autorizzata.", 403);
     const cors = new Headers({ Vary: "Origin" });
@@ -240,12 +256,13 @@ export default {
     if (request.method === "OPTIONS") {
       cors.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
       cors.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      cors.set("Access-Control-Max-Age", "600");
       return new Response(null, { status: 204, headers: cors });
     }
     const url = new URL(request.url);
     let response;
     try {
-      response = await handle(request, env, url);
+      response = await handle(request, env, url, ctx);
     } catch {
       console.error(JSON.stringify({ event: "api_error", path: url.pathname, method: request.method }));
       response = error("Servizio temporaneamente non disponibile.", 500);

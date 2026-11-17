@@ -14,7 +14,7 @@ function showError(element, message = "") {
   element.hidden = !message;
 }
 
-export function setupAccounts({ openProfile, showApp, closeApp }) {
+export function setupAccounts({ openProfile, showApp, closeApp, currentPushEndpoint }) {
   const accountForm = byId("accountForm");
   const accountError = byId("accountError");
   const submit = byId("submitAccount");
@@ -146,7 +146,8 @@ export function setupAccounts({ openProfile, showApp, closeApp }) {
     button.onclick = async () => {
       logoutButtons.forEach(item => { item.disabled = true; });
       try {
-        await api("/api/auth/logout", { method: "POST" });
+        const endpoint = await currentPushEndpoint();
+        await api("/api/auth/logout", { method: "POST", data: { endpoint } });
       } catch {
         // Local logout still works if the network is unavailable.
       } finally {

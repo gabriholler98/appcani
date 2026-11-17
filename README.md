@@ -16,3 +16,9 @@ L'interfaccia statica vive in `docs/` e viene pubblicata da GitHub Pages dal ram
 Modifica la struttura in `layout.mjs` o `account-layout.html`, poi rigenera `docs/index.html` con `node build.mjs`. Esegui il test di integrazione con `node --test tests/accounts.test.mjs` su Node.js 24.
 
 Ogni account ha un profilo del cane. Accedendo con lo stesso nome utente su un altro dispositivo si ritrovano il profilo, le passeggiate, le richieste e le chat. L'API mostra una zona approssimativa. L'organizzatore può condividere l'indirizzo esatto dopo l'accettazione di una richiesta.
+
+## Notifiche
+
+La campanella mostra gli avvisi degli ultimi 30 giorni. Le notifiche push sono facoltative e si attivano su ciascun dispositivo dalla campanella. Su iPhone e iPad occorre aprire l’app dalla schermata Home.
+
+Per abilitare le push, imposta sul Worker il segreto `VAPID_PRIVATE_JWK` con una chiave privata ECDSA P‑256 in formato JWK. Conserva la stessa chiave tra le pubblicazioni: i browser associano le sottoscrizioni alla sua chiave pubblica.
