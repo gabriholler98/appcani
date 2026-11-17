@@ -23,7 +23,27 @@ const api = `function api(path,opt){
   });
 }`;
 
-let html = replace(page, "<title>", '<script src="./config.js"></script><title>');
+const siteUrl = "https://gabriholler98.github.io/appcani/";
+const brandHead = `
+<script src="./config.js"></script>
+<title>Dogs in Giro · Passeggiate tra cani</title>
+<meta name="description" content="Organizza passeggiate tra cani in Trentino-Alto Adige.">
+<meta name="theme-color" content="#07110e">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Dogs in Giro">
+<meta property="og:description" content="Organizza passeggiate tra cani in Trentino-Alto Adige.">
+<meta property="og:url" content="${siteUrl}">
+<meta property="og:image" content="${siteUrl}assets/dogs-in-giro-miniatura.png">
+<meta property="og:image:alt" content="Una zampa dentro un segnaposto verde su fondo nero">
+<meta name="twitter:card" content="summary">
+<link rel="icon" type="image/png" href="./assets/dogs-in-giro-miniatura.png">
+<link rel="apple-touch-icon" href="./assets/dogs-in-giro-miniatura.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&amp;display=swap">
+`;
+const brandMarkup = '<div class="brand"><img src="./assets/dogs-in-giro-logo.png" width="2148" height="732" alt="Dogs in Giro"></div>';
+let html = replace(page, "<title>Insieme · passeggiate tra cani</title>", brandHead);
+html = replace(html, '</head>', '<link rel="stylesheet" href="./assets/brand.css">\n</head>');
+html = replace(html, '<div class="brand"><b>🐕🐶</b>insieme</div>', brandMarkup);
 html = replace(html, /function api\(path,opt\)[\s\S]*?(?=function updateProfile)/.exec(html)?.[0] ?? "<api non trovata>", api);
 html = replace(html, "'/api/walks'+viewer()", "'/api/walks'");
 html = replace(html, "+'&profile_id='+encodeURIComponent(profile.id)+'&token='+encodeURIComponent(profile.token)", "");
