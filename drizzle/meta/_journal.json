@@ -4,6 +4,7 @@
   "entries": [
     { "idx": 0, "version": "6", "when": 1794830000000, "tag": "0000_shared_walks", "breakpoints": true },
     { "idx": 1, "version": "6", "when": 1794831000000, "tag": "0001_chat_and_reveal", "breakpoints": true },
-    { "idx": 2, "version": "6", "when": 1794917400000, "tag": "0002_accounts", "breakpoints": true }
+    { "idx": 2, "version": "6", "when": 1794917400000, "tag": "0002_accounts", "breakpoints": true },
+    { "idx": 3, "version": "6", "when": 1794919200000, "tag": "0003_walk_archive", "breakpoints": true }
   ]
 }

@@ -14,6 +14,10 @@ let locationChoice;
 let locationMode = "popular";
 let currentProfile;
 let loadId = 0;
+let archiveLoadId = 0;
+const archive = byId("archiveDialog");
+const archiveFilters = document.querySelectorAll("[data-archive-filter]");
+let archiveFilter = "created";
 
 const accounts = setupAccounts({ openProfile, showApp, closeApp });
 const api = accounts.api;
@@ -73,6 +77,9 @@ function closeApp() {
   byId("walks").replaceChildren();
   byId("requestBox").replaceChildren();
   byId("count").textContent = "";
+  archiveLoadId += 1;
+  byId("archiveList").replaceChildren();
+  archiveNotice();
   markers?.clearLayers();
 }
 
@@ -88,6 +95,12 @@ function button(text, action, className = "primary") {
   item.type = "button";
   item.onclick = action;
   return item;
+}
+
+function durationLabel(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return [hours && hours + " h", remainder && remainder + " min"].filter(Boolean).join(" ");
 }
 
 async function loadWalks() {
@@ -123,7 +136,8 @@ function showWalks(walks) {
     card.append(
       element("h3", walk.title),
       element("p", walk.dog_name + " " + walk.emoji + " · " + walk.breed + " · taglia " + walk.size.toLowerCase()),
-      element("p", "📅 " + walk.day + " · " + walk.time + " · fino a " + walk.max_participants + " amico/i"),
+      element("p", "📅 " + walk.day + " · " + walk.time + " · " + durationLabel(walk.duration_minutes)),
+      element("p", "Fino a " + walk.max_participants + " amico/i"),
       element("p", "📍 " + walk.area_label + (walk.reveal_exact ? " · luogo sbloccato" : "")),
     );
     const actions = element("footer", "");
@@ -172,6 +186,70 @@ async function act(path, data, success) {
     await loadWalks();
   } catch (failure) {
     announce(failure.message);
+  }
+}
+
+function archiveNotice(message = "") {
+  const status = byId("archiveNotice");
+  status.textContent = message;
+  status.hidden = !message;
+}
+
+function renderArchive(walks) {
+  const list = byId("archiveList");
+  if (!walks.length) {
+    list.replaceChildren(element("p", "Nessuna passeggiata in questo filtro.", "empty"));
+    return;
+  }
+  list.replaceChildren(...walks.map(walk => {
+    const card = element("article", "", "card archive-card");
+    card.append(element("h3", walk.title),
+      element("p", walk.dog_name + " " + walk.emoji + " · " + walk.city),
+      element("p", walk.day + " · " + walk.time + " · " + durationLabel(walk.duration_minutes)));
+    const actions = element("footer", "");
+    const status = walk.status === "cancelled" ? "Annullata"
+      : archiveFilter === "requests" ? "Non accettata" : "Conclusa";
+    actions.append(element("span", status, "status"));
+    if (walk.can_chat) actions.append(button("Apri chat", () => openChat(walk.id, true), "primary"));
+    if (walk.is_host) actions.append(button("Elimina definitivamente", () => deleteArchivedWalk(walk), "cancel archive-delete"));
+    card.append(actions);
+    return card;
+  }));
+}
+
+async function loadArchive() {
+  if (!currentProfile || !archive.open) return;
+  const load = ++archiveLoadId;
+  try {
+    const { walks } = await api("/api/walks/archive?filter=" + encodeURIComponent(archiveFilter));
+    if (load === archiveLoadId && archive.open) renderArchive(walks);
+  } catch (failure) {
+    if (load === archiveLoadId && archive.open) archiveNotice(failure.message);
+  }
+}
+
+function selectArchive(filter) {
+  archiveFilter = filter;
+  archiveFilters.forEach(item => item.setAttribute("aria-pressed", String(item.dataset.archiveFilter === filter)));
+  byId("archiveList").replaceChildren(element("p", "Caricamento…", "muted"));
+  archiveNotice();
+  void loadArchive();
+}
+
+byId("openArchive").onclick = () => {
+  archive.showModal();
+  selectArchive("created");
+};
+archiveFilters.forEach(item => { item.onclick = () => selectArchive(item.dataset.archiveFilter); });
+
+async function deleteArchivedWalk(walk) {
+  if (!confirm("Eliminare definitivamente «" + walk.title + "»? La passeggiata, le richieste e la chat spariranno anche per gli altri partecipanti.")) return;
+  try {
+    await api("/api/walks/delete", { data: { walk_id: walk.id } });
+    archiveNotice("Passeggiata eliminata definitivamente.");
+    await loadArchive();
+  } catch (failure) {
+    archiveNotice(failure.message);
   }
 }
 
@@ -229,7 +307,7 @@ byId("findAddress").onclick = async () => {
 
 walkForm.onsubmit = async event => {
   event.preventDefault();
-  const { title, city, day, time, max, popular } = Object.fromEntries(new FormData(walkForm));
+  const { title, city, day, time, max, popular, duration_minutes } = Object.fromEntries(new FormData(walkForm));
   let coordinates = locationChoice;
   if (locationMode === "popular") {
     const [area_label, latitude, longitude] = popular.split("|");
@@ -239,7 +317,7 @@ walkForm.onsubmit = async event => {
   const submit = event.submitter;
   submit.disabled = true;
   try {
-    await api("/api/walk", { data: { title, city, day, time, max: Number(max), ...coordinates } });
+    await api("/api/walk", { data: { title, city, day, time, max: Number(max), duration_minutes: Number(duration_minutes), ...coordinates } });
     walkDialog.close();
     walkForm.reset();
     locationChoice = null;
@@ -256,10 +334,16 @@ walkForm.onsubmit = async event => {
 const chat = byId("chatDialog");
 const chatForm = byId("chatForm");
 const chatMessages = byId("chatMessages");
-function openChat(walkId) {
+function setChatReadOnly(readOnly) {
+  chatForm.hidden = readOnly;
+  byId("chatArchived").hidden = !readOnly;
+}
+
+function openChat(walkId, archived = false) {
   selectedWalk = walkId;
   chatMessages.replaceChildren();
   chatForm.reset();
+  setChatReadOnly(archived);
   chat.showModal();
   void refreshChat();
   chatTimer = setInterval(refreshChat, 8000);
@@ -275,8 +359,9 @@ async function refreshChat() {
   const walk = selectedWalk;
   if (!walk || !currentProfile) return;
   try {
-    const { messages } = await api("/api/messages?walk_id=" + encodeURIComponent(walk));
+    const { messages, read_only } = await api("/api/messages?walk_id=" + encodeURIComponent(walk));
     if (!chat.open || selectedWalk !== walk) return;
+    setChatReadOnly(read_only);
     const nodes = messages.map(message => {
       const row = element("p", "");
       row.append(element("b", message.emoji + " " + message.dog_name), document.createElement("br"), document.createTextNode(message.body));
@@ -285,7 +370,19 @@ async function refreshChat() {
     chatMessages.replaceChildren(...(nodes.length ? nodes : [element("p", "Nessun messaggio ancora.", "muted")]));
     chatMessages.scrollTop = chatMessages.scrollHeight;
   } catch (failure) {
-    if (chat.open) announce(failure.message);
+    if (!chat.open || selectedWalk !== walk) return;
+    if (failure.status === 403) {
+      chat.close();
+      if (archive.open) {
+        archiveNotice(failure.message);
+        void loadArchive();
+      } else {
+        announce(failure.message);
+        void loadWalks();
+      }
+    } else {
+      announce(failure.message);
+    }
   }
 }
 
@@ -306,5 +403,8 @@ chatForm.onsubmit = async event => {
   }
 };
 
-setInterval(loadWalks, 20000);
+setInterval(() => {
+  void loadWalks();
+  if (archive.open && !chat.open) void loadArchive();
+}, 20000);
 void accounts.restore();

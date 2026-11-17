@@ -77,7 +77,11 @@ export function setupAccounts({ openProfile, showApp, closeApp }) {
     if (response.status === 401 && !options.public && currentToken && currentToken === token) {
       clearSession("La sessione è scaduta. Accedi di nuovo.");
     }
-    if (!response.ok) throw new Error(result.error || "Il servizio online non è disponibile.");
+    if (!response.ok) {
+      const failure = new Error(result.error || "Il servizio online non è disponibile.");
+      failure.status = response.status;
+      throw failure;
+    }
     if (!options.public && currentToken !== token) throw new Error("La sessione è cambiata.");
     return result;
   }

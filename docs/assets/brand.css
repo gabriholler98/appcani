@@ -27,7 +27,7 @@ h1, h2, h3 {
   display: block;
   overflow: hidden;
   border-radius: 16px;
-  background: #050505;
+  background: #fff;
 }
 
 .brand img {
@@ -213,4 +213,98 @@ h1, h2, h3 {
   font-size: 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+
+.archive-entry {
+  min-height: 44px;
+  margin: 0 0 15px;
+}
+
+.archive-modal {
+  max-width: 720px;
+  max-height: 90dvh;
+}
+
+.archive-filters,
+.archive-card footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.archive-filters {
+  margin: 16px 0;
+}
+
+.archive-filters button {
+  min-height: 42px;
+  padding: 7px 12px;
+  color: var(--ink);
+  background: var(--sand);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-weight: 800;
+}
+
+.archive-filters button[aria-pressed="true"] {
+  color: white;
+  background: var(--pine);
+  border-color: var(--pine);
+}
+
+.archive-list {
+  display: grid;
+  gap: 10px;
+}
+
+.archive-card footer {
+  justify-content: flex-start;
+}
+
+.archive-delete {
+  color: #8d2424;
+  background: #f8e8e6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --ink: #e7f4ee;
+    --pine: #188064;
+    --sand: #101a16;
+    --peach: #224637;
+    --line: #355447;
+    --surface: #1a2a23;
+    --soft-text: #b5cabf;
+  }
+
+  .brand { background: #050505; }
+  .side, .profile, .requests, .outline, .chip, .card, .empty, .modal, .account-card {
+    color: var(--ink);
+    background: var(--surface);
+  }
+
+  .profile p, .muted, .top p, .card p, .empty, .tag { color: var(--soft-text); }
+  .empty, .request { border-color: var(--line); }
+  .request button, .mode button, .cancel, .status {
+    color: var(--ink);
+    background: var(--peach);
+  }
+
+  .mode button.active {
+    color: var(--ink);
+    background: #235d4c;
+    border-color: #4c947b;
+  }
+
+  .privacy { background: #1a2a23ee; }
+  input, select, .account-form input:not([type="checkbox"]) {
+    color: var(--ink);
+    background: var(--sand);
+    border-color: var(--line);
+  }
+
+  .account-error, .archive-delete { color: #ffc1bc; }
+  .archive-delete { background: #512b2a; }
+  .toast { color: var(--ink); background: var(--surface); }
 }

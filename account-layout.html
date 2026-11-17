@@ -1,8 +1,6 @@
 <main class="account-screen" id="accountScreen" aria-labelledby="accountHeading">
   <div class="account-card">
-    <div class="brand">
-      <img src="./assets/dogs-in-giro-logo.png" width="2148" height="732" alt="Dogs in Giro">
-    </div>
+    <!-- brand -->
     <p class="account-loading" id="accountLoading" role="status">Caricamento…</p>
     <div id="accountEntry" hidden>
       <div class="account-tabs" role="group" aria-label="Accedi o registrati">
@@ -38,11 +36,26 @@
   </div>
   <noscript>Attiva JavaScript per accedere a Dogs in Giro.</noscript>
 </main>
+<dialog class="modal archive-modal" id="archiveDialog" aria-labelledby="archiveHeading">
+  <article>
+    <h2 id="archiveHeading">Le mie passeggiate</h2>
+    <p class="muted">Ritrova le passeggiate concluse, le richieste e le chat.</p>
+    <div class="archive-filters" role="group" aria-label="Filtra le passeggiate archiviate">
+      <button type="button" data-archive-filter="created" aria-pressed="true">Create da te</button>
+      <button type="button" data-archive-filter="requests" aria-pressed="false">Richieste inviate</button>
+      <button type="button" data-archive-filter="attended" aria-pressed="false">Partecipazioni</button>
+    </div>
+    <p id="archiveNotice" role="status" class="muted" hidden></p>
+    <div id="archiveList" class="archive-list"></div>
+    <div class="actions"><button class="cancel" type="button" data-close="archiveDialog">Chiudi</button></div>
+  </article>
+</dialog>
 <dialog class="modal" id="chatDialog" aria-labelledby="chatHeading">
   <article>
     <h2 id="chatHeading">Chat della passeggiata</h2>
     <p class="muted">Conoscetevi qui prima di condividere il luogo esatto.</p>
     <div id="chatMessages" class="chat-messages" role="log"></div>
+    <p id="chatArchived" class="muted" hidden>Passeggiata conclusa. Puoi consultare la chat archiviata.</p>
     <form id="chatForm" class="chat-form">
       <input name="message" aria-label="Messaggio" maxlength="500" required placeholder="Scrivi un messaggio">
       <button class="primary" type="submit">Invia</button>
