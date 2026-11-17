@@ -79,21 +79,23 @@ test("account required, data follows the account and chat stays private", async 
   await call("notifications/device/enable", { token: host, data: device });
   const { key } = await call("notifications/push-settings", { token: host });
   assert.equal(Buffer.from(key, "base64url").length, 65);
-  let deliveries = 0;
+  const deliveries = [];
   await deliverPush(env, [databaseProfile.account_id], async (url, options) => {
-    deliveries += 1;
-    assert.equal(url, device.endpoint);
-    assert.equal(options.method, "POST");
-    assert.equal(options.body, undefined);
-    const [jwt, publicKey] = options.headers.Authorization.slice("vapid t=".length).split(", k=");
-    assert.equal(publicKey, key);
-    const [header, claims, signature] = jwt.split(".");
-    assert.equal(JSON.parse(Buffer.from(claims, "base64url")).aud, "https://fcm.googleapis.com");
-    assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pair.publicKey,
-      Buffer.from(signature, "base64url"), new TextEncoder().encode(header + "." + claims)));
+    deliveries.push({ url, options });
     return new Response(null, { status: 410 });
   });
-  assert.equal(deliveries, 1);
+  assert.equal(deliveries.length, 1);
+  const [{ url, options }] = deliveries;
+  assert.equal(url, device.endpoint);
+  assert.equal(options.redirect, "manual");
+  assert.equal(options.method, "POST");
+  assert.equal(options.body, undefined);
+  const [jwt, publicKey] = options.headers.Authorization.slice("vapid t=".length).split(", k=");
+  assert.equal(publicKey, key);
+  const [header, claims, signature] = jwt.split(".");
+  assert.equal(JSON.parse(Buffer.from(claims, "base64url")).aud, "https://fcm.googleapis.com");
+  assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pair.publicKey,
+    Buffer.from(signature, "base64url"), new TextEncoder().encode(header + "." + claims)));
   assert.equal((await call("notifications/device/check", { token: host, data: device })).enabled, false);
   await call("notifications/device/enable", { token: host, data: device });
   assert.notEqual(account.password_hash, proof);

@@ -148,7 +148,6 @@ export async function deliverPush(env, accounts, send = fetch) {
   const authorizations = new Map();
   const subject = new URL("/appcani/", env.PAGES_ORIGIN).href;
   const expired = [];
-  let failures = 0;
   // Keep external connections below the Workers per-invocation concurrency limit.
   for (let i = 0; i < results.length; i += 5) {
     await Promise.all(results.slice(i, i + 5).map(async device => {
@@ -159,18 +158,20 @@ export async function deliverPush(env, accounts, send = fetch) {
           authorizations.set(endpoint.origin, signVapid(privateKey, publicKey, endpoint.origin, subject));
         }
         const response = await send(endpoint.href, {
-          method: "POST", redirect: "error", signal: AbortSignal.timeout(6000),
+          // Workers supports manual redirects. Never forward a VAPID header to another host.
+          method: "POST", redirect: "manual", signal: AbortSignal.timeout(6000),
           headers: { Authorization: await authorizations.get(endpoint.origin), TTL: "900", Topic: "dogs-in-giro" },
         });
         await response.body?.cancel();
         if (response.status === 404 || response.status === 410) expired.push(device);
-        else if (!response.ok) failures += 1;
-      } catch {
-        failures += 1;
+        if (!response.ok) {
+          console.warn(JSON.stringify({ event: "push_provider_rejected", provider: endpoint.hostname, status: response.status }));
+        }
+      } catch (failure) {
+        console.warn(JSON.stringify({ event: "push_request_failed", provider: endpoint.hostname, error_type: failure.name }));
       }
     }));
   }
   if (expired.length) await env.DB.batch(expired.map(device =>
     env.DB.prepare("DELETE FROM push_devices WHERE endpoint = ? AND updated_at = ?").bind(device.endpoint, device.updated_at)));
-  if (failures) console.warn(JSON.stringify({ event: "push_provider_rejected", count: failures }));
 }
