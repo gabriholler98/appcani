@@ -1,29 +1,9 @@
-import { announce,byId,busy,button,element,fill,row,status } from "./ui.js";
+import { announce,byId,busy,button,element,fill,row,status,sexSymbol } from "./ui.js?v=8";
+import { appendDogAvatar,avatarFor,populateDogAvatarPicker,renderDogAvatar } from "./dog-avatars.js?v=8";
+import {setupPhotoEditor} from "./photo-editor.js?v=8";
 
-const dogFields=["name","breed","birth","size","energy","emoji","notes"];
+const dogFields=["name","breed","birth","size","energy","emoji","notes","sex"];
 const ownerFields=["owner","age_group","gender","visibility"];
-
-async function resizePhoto(file) {
-  if (!file?.size || file.size>20*1024*1024) throw new Error("Scegli un’immagine di massimo 20 MB.");
-  const url=URL.createObjectURL(file);
-  try {
-    const image=new Image();
-    image.src=url;
-    await image.decode().catch(()=>{throw new Error("Immagine non leggibile. Prova con una foto JPEG o PNG.");});
-    const side=Math.min(image.naturalWidth,image.naturalHeight);
-    const canvas=document.createElement("canvas");
-    canvas.width=canvas.height=Math.min(side,384);
-    const ctx=canvas.getContext("2d");
-    ctx.fillStyle="white";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(image,(image.naturalWidth-side)/2,(image.naturalHeight-side)/2,side,side,0,0,canvas.width,canvas.height);
-    for (const quality of [.82,.7,.55,.4]) {
-      const result=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",quality));
-      if (result?.size<=80*1024) return result;
-    }
-    throw new Error("La foto è troppo grande anche dopo la compressione.");
-  } finally { URL.revokeObjectURL(url); }
-}
 
 export function setupPeople({api,current,setProfile,saveFirst,openReport,connectionsChanged}) {
   const dogForm=byId("dogForm");
@@ -34,14 +14,17 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
   const photoPreview=byId("photoPreview");
   const photoUrls=new Set();
   const photos=new Map();
+  const editor=setupPhotoEditor();
+  populateDogAvatarPicker(byId("dogAvatarPicker"));
   let generation=0;
   let editing=null;
   let draftPhoto=null;
-  let draftUrl="";
   let photoPick=0;
   let personRequest=0;
   let peopleRequest=0;
   let searchRequest=0;
+  let friendTab="friends";
+  let connectionsData={relationships:[],blocked:[]};
 
   function rememberUrl(blob) {
     const url=URL.createObjectURL(blob);
@@ -63,13 +46,15 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
   function dogCard(dog,mine) {
     const card=element("article","","card");
     const head=element("div","","dog-head");
-    const avatar=element("div",dog.emoji,"dog-photo");
+    const avatar=element("div","","dog-photo");
+    renderDogAvatar(avatar,dog.emoji);
     avatar.setAttribute("aria-hidden","true");
     const details=element("div");
-    details.append(element("h3",dog.name),element("p",dog.breed+" · "+dog.size.toLowerCase(),"muted"));
+    details.append(element("h3",[dog.name,sexSymbol(dog.sex)].filter(Boolean).join(" ")),element("p",dog.breed+" · "+dog.size.toLowerCase(),"muted"));
     head.append(avatar,details);
     card.append(head,element("p",dog.birth+" · Energia: "+dog.energy.toLowerCase(),"muted"));
     if (dog.notes) card.append(element("p",dog.notes,"card-description"));
+    if(dog.sex)card.append(element("p",dog.sex==="male"?"♂ Maschio":"♀ Femmina","muted"));
     if (dog.photo) void photoUrl(dog.id).then(url=>{
       if (!url || !avatar.isConnected) return;
       const image=element("img");
@@ -94,19 +79,24 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
     if (!profile) return;
     byId("ownerTitle").textContent=profile.owner;
     byId("dogList").replaceChildren(...profile.dogs.map(dog=>dogCard(dog,true)));
+    if(!profile.dogs.length)byId("dogList").append(element("p","L’account amministratore può organizzare passeggiate senza cani.","muted"));
   }
 
   function openDog(dog=null,setup=false,knownOwner="") {
     editing=dog?.id??null;
     draftPhoto=null;
+    editor.clear();
     dogForm.reset();
     if (dog) fill(dogForm,dog,dogFields);
+    const selected=avatarFor(dog?.emoji) ? dog.emoji : "avatar:meticcio";
+    dogForm.querySelector(`input[name="emoji"][value="${selected}"]`).checked=true;
     byId("dogHeading").textContent=dog?"Modifica cane":"Aggiungi un cane";
     const name=dogForm.elements.owner;
     byId("setupOwner").hidden=!setup;
     name.required=setup;
     name.value=knownOwner;
     byId("removePhoto").hidden=!dog?.photo;
+    status(byId("photoStatus"));
     dogForm.querySelector("button:not([type])").disabled=false;
     photoPreview.hidden=true;
     status(dogForm.querySelector(".form-error"));
@@ -118,9 +108,8 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
     });
   }
   dogDialog.onclose=()=>{
+    editor.clear();
     photoPick+=1;
-    if (draftUrl) URL.revokeObjectURL(draftUrl);
-    draftUrl="";
     draftPhoto=null;
     photoPreview.removeAttribute("src");
   };
@@ -133,14 +122,10 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
     save.disabled=true;
     status(error);
     try {
-      const result=await resizePhoto(file);
+      const result=await editor.choose(file);
       if (pick!==photoPick || !dogDialog.open) return;
-      if (draftUrl) URL.revokeObjectURL(draftUrl);
       draftPhoto=result;
-      draftUrl=URL.createObjectURL(result);
-      dogForm.elements.removePhoto.checked=false;
-      photoPreview.src=draftUrl;
-      photoPreview.hidden=false;
+      photoPreview.hidden=true;
     } catch (failure) {
       if (pick===photoPick) status(error,failure.message);
     } finally { if (pick===photoPick) save.disabled=false; }
@@ -151,8 +136,7 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
     status(error);
     void busy(event.submitter,async()=>{
       const data=Object.fromEntries(dogFields.map(key=>[key,dogForm.elements[key].value]));
-      const photo=draftPhoto;
-      const remove=dogForm.elements.removePhoto.checked;
+      const photo=await editor.blob();
       let profile,id=editing;
       if (dogForm.elements.owner.required) {
         profile=await saveFirst({owner:dogForm.elements.owner.value,firstDog:data});
@@ -160,15 +144,18 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
       } else {
         ({profile,dog_id:id}=await api("/api/profile/dogs",{data:{...data,id}}));
       }
-      if (id && (photo||remove)) {
+      editing=id;
+      if (id && photo) {
         try {
-          await api("/api/profile/photo?id="+encodeURIComponent(id),{method:photo?"POST":"DELETE",body:photo||undefined});
+          status(byId("photoStatus"),"Caricamento foto…");
+          await api("/api/profile/photo?id="+encodeURIComponent(id),{method:"POST",body:photo});
           photos.delete(id);
           profile.dogs.find(dog=>dog.id===id).photo=Boolean(photo);
         } catch (failure) {
-          announce("Cane salvato. "+failure.message);
           setProfile(profile);
-          dogDialog.close();
+          dogForm.elements.owner.required=false;
+          status(error,"Cane salvato, foto da completare. "+failure.message+" Premi Salva cane per riprovare.");
+          status(byId("photoStatus"));
           return;
         }
       }
@@ -176,6 +163,22 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
       dogDialog.close();
       announce("Cane salvato.");
     },failure=>status(error,failure.message));
+  };
+  byId("removePhoto").onclick=event=>{
+    const dog=current()?.dogs.find(dog=>dog.id===editing);
+    if(!dog||!confirm("Eliminare la foto e usare l’illustrazione scelta?"))return;
+    const error=dogForm.querySelector(".form-error");
+    status(error);
+    void busy(event.currentTarget,async()=>{
+      await api("/api/profile/photo?id="+encodeURIComponent(dog.id),{method:"DELETE"});
+      photos.delete(dog.id);
+      dog.photo=false;
+      editor.clear();
+      photoPreview.hidden=true;
+      event.target.hidden=true;
+      setProfile(current());
+      status(byId("photoStatus"),"Foto rimossa. Viene usata l’illustrazione scelta.");
+    },failure=>status(error,failure.message+" Riprova con Rimuovi foto."));
   };
   byId("addDog").onclick=()=>openDog();
   byId("editOwner").onclick=()=>{
@@ -247,22 +250,40 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
     try {
       const result=await api("/api/people/connections");
       if (request!==peopleRequest || byId("peoplePage").hidden) return;
+      connectionsData=result;
+      renderConnections();
+    } catch (failure) { if (request===peopleRequest) announce(failure.message); }
+  }
+  function renderConnections() {
+      const result=connectionsData;
+      byId("friendSearch").hidden=friendTab!=="search";
+      byId("friendListHeading").textContent=({friends:"I tuoi amici",received:"Richieste ricevute",sent:"Richieste inviate",search:"Trova persone e cani"})[friendTab];
       const list=byId("connectionsList");
-      const cards=result.relationships.map(profile=>{
+      list.hidden=friendTab==="search";
+      document.querySelectorAll("[data-friends]").forEach(node=>node.setAttribute("aria-pressed",String(node.dataset.friends===friendTab)));
+      const selected=result.relationships.filter(item=>friendTab==="friends"?item.state==="friends":
+        item.state==="pending"&&(friendTab==="received"?item.sender_id!==current().id:item.sender_id===current().id));
+      const count=result.relationships.filter(item=>item.state==="pending"&&item.sender_id!==current().id).length;
+      byId("friendsBadge").textContent=String(count);byId("friendsBadge").hidden=count===0;
+      const cards=selected.map(profile=>{
         const card=element("article","","card");
-        card.append(element("h3",profile.owner),element("p",profile.state==="friends"?"Amici":profile.sender_id===current().id?
-          "Richiesta inviata":"Richiesta ricevuta","muted"),row(button("Vedi profilo",()=>openPerson(profile.id))));
+        const actions=row(button("Vedi profilo",()=>openPerson(profile.id)));
+        if(profile.state==="pending") {
+          if(profile.sender_id!==current().id)actions.append(button("Accetta",control=>busy(control,()=>connection(profile.id,"accept")),"primary"));
+          actions.append(button(profile.sender_id===current().id?"Annulla richiesta":"Rifiuta",control=>busy(control,()=>connection(profile.id,"remove"))));
+        }
+        card.append(element("h3",profile.owner),element("p",profile.state==="friends"?"Amici":profile.sender_id===current().id?"Richiesta inviata":"Richiesta ricevuta","muted"),actions);
         return card;
       });
-      for (const profile of result.blocked) {
+      for (const profile of friendTab==="friends"?result.blocked:[]) {
         const card=element("article","","card");
         card.append(element("h3",profile.owner),element("p","Bloccato","muted"),row(button("Sblocca",control=>busy(control,
           ()=>connection(profile.id,"unblock")))));
         cards.push(card);
       }
-      list.replaceChildren(...(cards.length?cards:[element("p","Non hai ancora amici o richieste.","empty")]));
-    } catch (failure) { if (request===peopleRequest) announce(failure.message); }
+      list.replaceChildren(...(cards.length?cards:[element("p",friendTab==="friends"?"Non hai ancora amici. Usa Cerca persone e cani per inviare una richiesta.":"Non ci sono richieste in questa sezione.","empty")]));
   }
+  document.querySelectorAll("[data-friends]").forEach(node=>{node.onclick=()=>{friendTab=node.dataset.friends;renderConnections();};});
   const search=byId("searchPeople");
   search.onsubmit=event=>{
     event.preventDefault();
@@ -280,7 +301,10 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
         const group=element("div","","cards");
         for (const item of items) {
           const card=element("article","","card");
-          card.append(element("h3",item.name?item.emoji+" "+item.name:item.owner));
+          const title=element("h3",item.name?[item.name,sexSymbol(item.sex)].filter(Boolean).join(" "):item.owner);
+          if (item.name && appendDogAvatar(title,item.emoji)) title.prepend(document.createTextNode(" "));
+          else if (item.name) title.prepend(document.createTextNode((item.emoji??"🐕")+" "));
+          card.append(title);
           if (item.name) card.append(element("p",item.breed+" · "+item.owner,"muted"));
           card.append(row(button(item.name?"Vedi proprietario":"Vedi profilo",()=>openPerson(item.profile_id??item.id))));
           group.append(card);
@@ -291,7 +315,7 @@ export function setupPeople({api,current,setProfile,saveFirst,openReport,connect
     },failure=>status(message,failure.message));
   };
   return {
-    openDog,openPerson,renderProfile,refreshConnections,
+    openDog,openPerson,renderProfile,refreshConnections,photoUrl,
     reset() {
       generation+=1;
       personRequest+=1;

@@ -1,7 +1,8 @@
 import { error, json } from "./accounts.mjs";
 import { blocked, clean, friendship, nowSeconds } from "./profiles.mjs";
 import { defaultDuration, walkTiming } from "./walk-time.mjs";
-import { commitNotification, unreadQuery } from "./notifications.mjs";
+import { commitNotification, deliverPush, unreadQuery } from "./notifications.mjs";
+import { distanceSql,initializePositions,publicPoint,searchArea } from "./geo.mjs";
 
 const utf8 = new TextEncoder();
 const timestamp = () => new Date().toISOString();
@@ -28,7 +29,7 @@ function viewWalk(walk, viewer) {
   const host = walk.host_profile_id===viewer;
   const accepted = walk.request_status==="accepted";
   const reveal = host || (accepted && Boolean(walk.details_released) && walk.status==="open" && walk.ends_at>nowSeconds());
-  const { dogs_json, details_released, latitude, longitude, area_label, ...safe } = walk;
+  const { dogs_json, details_released, latitude, longitude, area_label, public_latitude,public_longitude, ...safe } = walk;
   const dogs = JSON.parse(dogs_json);
   const lead = dogs[0] ?? {};
   return {
@@ -53,20 +54,25 @@ export async function listWalks(env, account, query) {
   const size = clean(query.get("size"),16);
   const inclusive = query.get("full")==="1";
   const friendsOnly = query.get("friends")==="1";
+  const area=own?null:searchArea(query);
+  if(area===false)return error("Scegli una posizione e un raggio validi.");
+  if(!own)await initializePositions(env);
+  const distance=distanceSql(area);
   const [events,requests,unread] = await env.DB.batch([
     env.DB.prepare(`WITH viewer AS (SELECT ? AS id)
-      SELECT ${walkFields},p.owner_name AS host_name
+      SELECT ${walkFields},p.owner_name AS host_name,w.public_latitude,w.public_longitude
       FROM viewer,walks w JOIN profiles p ON p.id=w.host_profile_id AND p.account_id IS NOT NULL
       LEFT JOIN join_requests j ON j.walk_id=w.id AND j.profile_id=viewer.id
       WHERE w.status='open' AND w.ends_at>?
        AND (w.host_profile_id=viewer.id OR ${notBlocked("viewer.id","w.host_profile_id")})
+       AND (?=0 OR ${distance}<=?)
        AND (${own ? "(w.host_profile_id=viewer.id OR j.status IS NOT NULL)" :
          `(? OR ${spaces}>0)
           AND (?=0 OR EXISTS(SELECT 1 FROM relationships r WHERE ${friendship("viewer.id","w.host_profile_id")}))
           AND (?='' OR LOWER(w.city)=LOWER(?)) AND (?='' OR w.day>=?) AND (?='' OR w.day<=?)
           AND (?='' OR EXISTS(SELECT 1 FROM json_each(w.dogs_json) d WHERE json_extract(d.value,'$.size')=?))`})
-      ORDER BY w.day,w.time,w.id LIMIT 100
-    `).bind(account.profileId,now,...(own?[]:[Number(inclusive),Number(friendsOnly),city,city,day,day,before,before,size,size])),
+      ORDER BY ${area?distance+",":""}w.day,w.time,w.id LIMIT 101
+    `).bind(account.profileId,now,Number(Boolean(area)),area?area.radius**2:0,...(own?[]:[Number(inclusive),Number(friendsOnly),city,city,day,day,before,before,size,size])),
     env.DB.prepare(`WITH viewer AS (SELECT ? AS id)
       SELECT j.id,j.walk_id,j.status,j.details_released,w.title,p.id AS profile_id,p.owner_name AS owner,
         j.dogs_json,${spaces} AS available_places
@@ -79,20 +85,25 @@ export async function listWalks(env, account, query) {
   ]);
   const key = own ? null : await crypto.subtle.importKey("raw", utf8.encode(env.LOCATION_MASK_KEY),
     { name:"HMAC",hash:"SHA-256" },false,["sign"]);
-  const walks = await Promise.all(events.results.map(async row=>{
+  const walks = await Promise.all(events.results.slice(0,100).map(async row=>{
     const walk = viewWalk(row,account.profileId);
     if (own) return walk;
-    const point = await maskedPoint(row,key);
+    const point = row.public_latitude===null ? await maskedPoint(row,key) : {latitude:row.public_latitude,longitude:row.public_longitude};
     if (walk.reveal_exact) {
       return {...walk,public_latitude:point.latitude,public_longitude:point.longitude};
     }
     Object.assign(walk,point);
     return walk;
   }));
-  return json({ walks, requests:requests.results.map(({dogs_json,...row})=>{
+  const dogIds=[...new Set(walks.flatMap(walk=>walk.dogs.map(dog=>dog.id)))];
+  const {results:thumbnails}=await env.DB.prepare(`SELECT d.id,(f.dog_id IS NOT NULL) AS photo,d.emoji,d.sex
+    FROM dogs d LEFT JOIN dog_photos f ON f.dog_id=d.id WHERE d.id IN(SELECT value FROM json_each(?))`).bind(JSON.stringify(dogIds)).all();
+  const images=new Map(thumbnails.map(dog=>[dog.id,dog]));
+  for(const walk of walks)walk.dogs=walk.dogs.map(dog=>({...dog,...images.get(dog.id)}));
+  return json({ walks,more:events.results.length>100,requests:requests.results.map(({dogs_json,...row})=>{
     const dogs = JSON.parse(dogs_json);
     return {...row,dogs,dog_name:dogs[0]?.name,emoji:dogs[0]?.emoji};
-  }), unread_notifications:unread.results[0].unread });
+  }), unread_notifications:unread.results[0].unread,friend_requests:unread.results[0].friend_requests });
 }
 
 async function getWalk(db, viewer, id) {
@@ -119,6 +130,10 @@ export async function walkDetails(db, viewer, id) {
     `).bind(viewer,id).all();
     participants.push(...results.map(({dogs_json,...participant})=>({...participant,dogs:JSON.parse(dogs_json)})));
   }
+  const ids=[...new Set([...walk.dogs,...participants.flatMap(person=>person.dogs)].map(dog=>dog.id))];
+  const {results:dogs}=await db.prepare("SELECT id,sex FROM dogs WHERE id IN(SELECT value FROM json_each(?))").bind(JSON.stringify(ids)).all();
+  const sexes=new Map(dogs.map(dog=>[dog.id,dog.sex]));
+  for(const dog of [...walk.dogs,...participants.flatMap(person=>person.dogs)])dog.sex=sexes.get(dog.id)??dog.sex??"";
   return json({ walk, participants });
 }
 
@@ -148,7 +163,7 @@ async function selectDogs(db, profileId, ids) {
   const explicit = ids!==undefined;
   if (explicit && (!Array.isArray(ids) || !ids.length || ids.length>12 ||
     !ids.every(id=>typeof id==="string" && id.length<=60) || new Set(ids).size!==ids.length)) return null;
-  const { results } = await db.prepare(`SELECT id,name,breed,size,emoji FROM dogs
+  const { results } = await db.prepare(`SELECT id,name,breed,size,emoji,sex FROM dogs
     WHERE profile_id=? AND archived=0 AND (?=0 OR id IN (SELECT value FROM json_each(?)))
     ORDER BY id!=profile_id,name COLLATE NOCASE LIMIT ?`
   ).bind(profileId,Number(explicit),JSON.stringify(ids??[]),explicit?12:1).all();
@@ -162,7 +177,8 @@ const validDogs = (roster,owner) => `NOT EXISTS (
 export async function saveWalk(env, ctx, viewer, data, walkId) {
   const title = clean(data?.title,55), city = clean(data?.city,40), area = clean(data?.area_label,140);
   const day = clean(data?.day,12), time = clean(data?.time,8), description = clean(data?.description,500);
-  const roster = await selectDogs(env.DB,viewer,data?.dog_ids);
+  const admin=await env.DB.prepare("SELECT 1 FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE p.id=? AND a.role='admin'").bind(viewer).first();
+  const roster = admin&&(!data?.dog_ids||Array.isArray(data.dog_ids)&&!data.dog_ids.length)?"[]":await selectDogs(env.DB,viewer,data?.dog_ids);
   if (!roster) return error("Seleziona almeno un cane del tuo profilo.");
   const dogCount = JSON.parse(roster).length;
   const legacy = data?.dog_ids===undefined && !walkId;
@@ -175,13 +191,14 @@ export async function saveWalk(env, ctx, viewer, data, walkId) {
     !Number.isInteger(max) || max<dogCount || max>24) return error("Controlla il luogo e il numero totale di posti.");
 
   const db=env.DB;
+  const publicLocation=await publicPoint(lat,lng,env.LOCATION_MASK_KEY);
   if (!walkId) {
     const id=crypto.randomUUID();
     const result=await db.prepare(`WITH proposed AS (SELECT ? AS owner,? AS roster)
       INSERT INTO walks(id,host_profile_id,host_token,title,city,area_label,latitude,longitude,day,time,max_participants,
-        created_at,duration_minutes,starts_at,ends_at,dogs_json,description)
-      SELECT ?,owner,'',?,?,?,?,?,?,?,?,?,?,?,?,roster,? FROM proposed WHERE ${validDogs("roster","owner")}
-    `).bind(viewer,roster,id,title,city,area,lat,lng,day,time,max,timestamp(),duration,timing.startsAt,timing.endsAt,description).run();
+        created_at,duration_minutes,starts_at,ends_at,dogs_json,description,public_latitude,public_longitude)
+      SELECT ?,owner,'',?,?,?,?,?,?,?,?,?,?,?,?,roster,?,?,? FROM proposed WHERE ${validDogs("roster","owner")}
+    `).bind(viewer,roster,id,title,city,area,lat,lng,day,time,max,timestamp(),duration,timing.startsAt,timing.endsAt,description,publicLocation.latitude,publicLocation.longitude).run();
     return result.meta.changes ? json({id,ok:true},201) : error("I cani selezionati sono cambiati.",409);
   }
 
@@ -202,10 +219,10 @@ export async function saveWalk(env, ctx, viewer, data, walkId) {
   if (!changes.length) return json({id:walkId,ok:true});
   const result=await commitNotification(env,ctx,db.prepare(`UPDATE walks AS w SET
     title=?,city=?,area_label=?,latitude=?,longitude=?,day=?,time=?,max_participants=?,duration_minutes=?,
-    starts_at=?,ends_at=?,dogs_json=?,description=?,revision=revision+1
+    starts_at=?,ends_at=?,dogs_json=?,description=?,revision=revision+1,public_latitude=?,public_longitude=?
     WHERE id=? AND host_profile_id=? AND revision=? AND status='open' AND starts_at>?
       AND ?+${guestCount}<=? AND ${validDogs("?","w.host_profile_id")}`
-  ).bind(title,city,area,lat,lng,day,time,max,duration,timing.startsAt,timing.endsAt,roster,description,
+  ).bind(title,city,area,lat,lng,day,time,max,duration,timing.startsAt,timing.endsAt,roster,description,publicLocation.latitude,publicLocation.longitude,
     walkId,viewer,previous.revision,nowSeconds(),dogCount,max,roster),"changed",walkId,[walkId],{
       details:changes.join(" · "), actor:viewer,
     });
@@ -306,17 +323,26 @@ export async function sendMessage(env,ctx,viewer,id,data) {
   return result.meta.changes ? json({ok:true},201) : error("La chat è archiviata o non è disponibile.",403);
 }
 
-export async function reportContent(db,viewer,data) {
+export async function reportContent(env,ctx,viewer,data) {
+  const db=env.DB;
   const id=clean(data?.id,60), reason=clean(data?.reason,500), kind=data?.kind;
   if (!id || !reason || !["profile","walk","message"].includes(kind)) return error("Indica il motivo della segnalazione.");
   let visible;
-  if (kind==="profile") visible=await db.prepare(`SELECT id FROM profiles WHERE id=? AND account_id IS NOT NULL AND id!=?`).bind(id,viewer).first();
+  if (kind==="profile") visible=await db.prepare(`SELECT id,owner_name,dog_name,breed FROM profiles WHERE id=? AND account_id IS NOT NULL AND id!=? AND ${notBlocked("?","id")}`).bind(id,viewer,viewer).first();
   if (kind==="walk") visible=await getWalk(db,viewer,id);
   if (kind==="message") visible=await db.prepare(`WITH person AS (SELECT ? AS viewer)
-    SELECT m.id FROM person,messages m JOIN walks w ON w.id=m.walk_id
+    SELECT m.id,m.body,m.walk_id,m.sender_profile_id,m.created_at FROM person,messages m JOIN walks w ON w.id=m.walk_id
     WHERE m.id=? AND m.sender_profile_id!=viewer AND w.status='open' AND ${canChat("viewer")}`).bind(viewer,id).first();
   if (!visible) return error("Contenuto non disponibile.",404);
-  await db.prepare("INSERT OR IGNORE INTO reports (id,reporter_id,kind,subject_id,reason,created_at) VALUES (?,?,?,?,?,?)")
-    .bind(crypto.randomUUID(),viewer,kind,id,reason,nowSeconds()).run();
+  if(kind==="walk")visible={id:visible.id,title:visible.title,description:visible.description,host_profile_id:visible.host_profile_id,day:visible.day};
+  const reportId=crypto.randomUUID();
+  const [,notices]=await db.batch([
+    db.prepare("INSERT OR IGNORE INTO reports (id,reporter_id,kind,subject_id,reason,created_at,snapshot) VALUES (?,?,?,?,?,?,?)")
+      .bind(reportId,viewer,kind,id,reason,nowSeconds(),JSON.stringify(visible)),
+    db.prepare(`INSERT INTO account_notices(account_id,kind,title,details,reference_id,created_at)
+      SELECT id,'report','Nuova segnalazione','Un contenuto attende una verifica.',?,? FROM accounts
+      WHERE role='admin' AND changes()>0 RETURNING account_id`).bind(reportId,nowSeconds()),
+  ]);
+  if(ctx&&notices.results.length)ctx.waitUntil(deliverPush(env,notices.results.map(row=>row.account_id)).catch(()=>{}));
   return json({ok:true});
 }

@@ -1,4 +1,4 @@
-import { byId,busy,button,element,status,timeFormat } from "./ui.js";
+import { byId,busy,button,element,status,timeFormat } from "./ui.js?v=8";
 
 export function setupChat(api,report) {
   const dialog=byId("chatDialog");

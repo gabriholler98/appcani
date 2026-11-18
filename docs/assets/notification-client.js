@@ -1,4 +1,4 @@
-import { announce,busy,button,element,status as messageStatus } from "./ui.js";
+import { announce,busy,button,element,status as messageStatus } from "./ui.js?v=8";
 
 const workerUrl = new URL("../service-worker.js", import.meta.url);
 const byId = id => document.getElementById(id);
@@ -10,6 +10,10 @@ const labels = {
   changed: "Passeggiata modificata",
   withdrawn: "Partecipazione ritirata",
   rejected: "Richiesta rifiutata",
+  friend_request:"Richiesta di amicizia",
+  friend_accepted:"Amicizia accettata",
+  admin:"Avviso dall’amministrazione",
+  report:"Segnalazione aggiornata",
 };
 const dateFormat = new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" });
 
@@ -60,7 +64,7 @@ export function setupNotifications(api, {openItem,preferences,setPreferences}) {
     try {
       const data = await api("/api/notifications");
       if (id !== requestId || !dialog.open) return;
-      latestId = data.items[0]?.id;
+      latestId = data.items.map(item=>item.id);
       updateUnread(data.unread, false);
       list.replaceChildren();
       for (const item of data.items) {
@@ -77,7 +81,8 @@ export function setupNotifications(api, {openItem,preferences,setPreferences}) {
         time.className="muted";
         row.append(heading,walk,time);
         if (item.details) row.append(element("p",item.details,"muted"));
-        row.append(button(item.kind==="chat"?"Apri chat":item.kind==="join"||item.kind==="withdrawn"?"Vedi richieste":"Vedi passeggiata",
+        row.append(button(item.kind==="admin"?"Segna come letto":item.kind==="report"?"Vedi segnalazioni":
+          item.kind.startsWith("friend_")?"Vedi amicizie":item.kind==="chat"?"Apri chat":item.kind==="join"||item.kind==="withdrawn"?"Vedi richieste":"Vedi passeggiata",
           control=>busy(control,async()=>{
             if (item.read_at===null) {
               const next=await api("/api/notifications/read",{data:{id:item.id}});
@@ -169,7 +174,7 @@ export function setupNotifications(api, {openItem,preferences,setPreferences}) {
   function showPreferences() {
     const target=byId("pushKinds");
     const muted=preferences();
-    target.replaceChildren(...Object.entries(labels).map(([kind,label])=>{
+    target.replaceChildren(...Object.entries(labels).filter(([kind])=>!["admin","report"].includes(kind)).map(([kind,label])=>{
       const checkbox=element("input");
       checkbox.type="checkbox";
       checkbox.name="enabled";
@@ -186,7 +191,7 @@ export function setupNotifications(api, {openItem,preferences,setPreferences}) {
     const formMessage=pushForm.querySelector(".form-error");
     void busy(event.submitter,async()=>{
       const enabled=new Set(new FormData(pushForm).getAll("enabled"));
-      const {muted}=await api("/api/notifications/preferences",{data:{muted:Object.keys(labels).filter(kind=>!enabled.has(kind))}});
+      const {muted}=await api("/api/notifications/preferences",{data:{muted:Object.keys(labels).filter(kind=>!["admin","report"].includes(kind)&&!enabled.has(kind))}});
       setPreferences(muted);
       messageStatus(formMessage);
       announce("Preferenze salvate.");
@@ -197,7 +202,7 @@ export function setupNotifications(api, {openItem,preferences,setPreferences}) {
     const version = generation;
     mark.disabled = true;
     try {
-      await api("/api/notifications/read", { data: { through: latestId } });
+      await api("/api/notifications/read", { data: { ids: latestId } });
       if (version === generation) await load();
     } catch (error) {
       if (version === generation && dialog.open) {

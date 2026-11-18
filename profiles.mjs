@@ -10,23 +10,26 @@ export const blocked = (a, b) =>
 const sizes = ["Piccola", "Media", "Grande"];
 const energies = ["Tranquilla", "Media", "Alta"];
 const emojis = ["🐕", "🐶", "🐩", "🦮"];
+const avatarIds = new Set(["meticcio","labrador-retriever","golden-retriever","pastore-tedesco","chihuahua","barboncino","jack-russell-terrier","bulldog-francese","beagle","bassotto","maltese","border-collie","cocker-spaniel-inglese","yorkshire-terrier","cane-corso","pastore-australiano","carlino","shih-tzu","boxer","rottweiler","pinscher-nano","setter-inglese","volpino-italiano","lagotto-romagnolo","husky-siberiano"]);
 const demographics = {
   age: ["", "18–24", "25–34", "35–44", "45–54", "55–64", "65+"],
   gender: ["", "Donna", "Uomo", "Altro"],
   visibility: ["friends", "members", "private"],
 };
-const notificationKinds = ["join","accepted","cancelled","chat","changed","withdrawn","rejected"];
+const notificationKinds = ["join","accepted","cancelled","chat","changed","withdrawn","rejected","friend_request","friend_accepted"];
 
-function dogFields(data) {
+export function dogFields(data) {
   const name = clean(data?.name ?? data?.dog, 30);
   const breed = clean(data?.breed, 45);
   const size = data?.size;
   const energy = data?.energy;
   const emoji = data?.emoji ?? "🐕";
   const birth = Number(data?.birth);
-  if (!name || !breed || !sizes.includes(size) || !energies.includes(energy) || !emojis.includes(emoji)
+  const sex=data?.sex??"";
+  if(!["","male","female"].includes(sex))return null;
+  if (!name || !breed || !sizes.includes(size) || !energies.includes(energy) || !(emojis.includes(emoji)||(typeof emoji==="string"&&emoji.startsWith("avatar:")&&avatarIds.has(emoji.slice(7))))
       || !Number.isInteger(birth) || birth < 1995 || birth > new Date().getFullYear()) return null;
-  return [name, breed, birth, size, energy, emoji, clean(data?.notes, 300)];
+  return [name, breed, birth, size, energy, emoji, clean(data?.notes, 300),sex];
 }
 
 const profileSummary = `id,dog_name AS dog,owner_name AS owner,breed,size,energy,emoji,birth_year AS birth,
@@ -40,7 +43,7 @@ export async function accountProfile(db, accountId) {
 
 async function memberDogs(db, profileId) {
   const { results } = await db.prepare(`
-    SELECT d.id,d.name,d.breed,d.birth,d.size,d.energy,d.emoji,d.notes, (f.dog_id IS NOT NULL) AS photo
+    SELECT d.id,d.name,d.breed,d.birth,d.size,d.energy,d.emoji,d.notes,d.sex, (f.dog_id IS NOT NULL) AS photo
     FROM dogs d LEFT JOIN dog_photos f ON f.dog_id=d.id WHERE d.profile_id=? AND d.archived=0
     ORDER BY d.id!=d.profile_id, d.name COLLATE NOCASE, d.id
   `).bind(profileId).all();
@@ -60,16 +63,16 @@ export async function setupProfile(db, account, data) {
       ON CONFLICT(account_id) DO UPDATE SET owner_name=excluded.owner_name,updated_at=excluded.updated_at
     `).bind(id, account.id, dog[0], owner, ...dog.slice(1,6), timestamp, timestamp),
     db.prepare(`
-      INSERT INTO dogs (id,profile_id,name,breed,birth,size,energy,emoji,notes)
-      SELECT COALESCE(?,p.id),p.id,?,?,?,?,?,?,? FROM profiles p WHERE p.account_id=?
+      INSERT INTO dogs (id,profile_id,name,breed,birth,size,energy,emoji,notes,sex)
+      SELECT COALESCE(?,p.id),p.id,?,?,?,?,?,?,?,? FROM profiles p WHERE p.account_id=?
         AND NOT EXISTS (SELECT 1 FROM dogs d WHERE d.profile_id=p.id AND d.archived=0)
       ON CONFLICT(id) DO UPDATE SET archived=0,name=excluded.name,breed=excluded.breed,birth=excluded.birth,
-        size=excluded.size,energy=excluded.energy,emoji=excluded.emoji,notes=excluded.notes
+        size=excluded.size,energy=excluded.energy,emoji=excluded.emoji,notes=excluded.notes,sex=excluded.sex
     `).bind(account.profileId?crypto.randomUUID():null,...dog,account.id),
   ];
   if (account.profileId && !data?.firstDog) {
     edits.push(db.prepare(`
-      UPDATE dogs SET name=?,breed=?,birth=?,size=?,energy=?,emoji=?,notes=?
+      UPDATE dogs SET name=?,breed=?,birth=?,size=?,energy=?,emoji=?,notes=?,sex=?
       WHERE id=? AND profile_id=? AND archived=0
     `).bind(...dog, id, id));
   }
@@ -91,7 +94,7 @@ export async function updateOwner(db, account, data) {
   return json({ profile: await accountProfile(db, account.id) });
 }
 
-function syncLeadDog(db, accountId) {
+export function syncLeadDog(db, accountId) {
   return db.prepare(`
     UPDATE profiles SET (dog_name,breed,birth_year,size,energy,emoji) = (
       SELECT name,breed,birth,size,energy,emoji FROM dogs
@@ -106,10 +109,10 @@ export async function saveDog(db, account, data) {
   const savedId = id || crypto.randomUUID();
   if (!fields) return error("Controlla i dati del cane.");
   const edit = id
-    ? db.prepare("UPDATE dogs SET name=?,breed=?,birth=?,size=?,energy=?,emoji=?,notes=? WHERE id=? AND profile_id=? AND archived=0")
+    ? db.prepare("UPDATE dogs SET name=?,breed=?,birth=?,size=?,energy=?,emoji=?,notes=?,sex=? WHERE id=? AND profile_id=? AND archived=0")
       .bind(...fields,id,account.profileId)
-    : db.prepare(`INSERT INTO dogs (id,profile_id,name,breed,birth,size,energy,emoji,notes)
-        SELECT ?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM dogs WHERE profile_id=? AND archived=0)<12`)
+    : db.prepare(`INSERT INTO dogs (id,profile_id,name,breed,birth,size,energy,emoji,notes,sex)
+        SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM dogs WHERE profile_id=? AND archived=0)<12`)
       .bind(savedId,account.profileId,...fields,account.profileId);
   const [saved] = await db.batch([edit,syncLeadDog(db,account.id)]);
   return saved.meta.changes ? json({ dog_id:savedId,profile:await accountProfile(db,account.id) }) : error("Cane non disponibile o limite di 12 cani raggiunto.",409);
@@ -165,7 +168,7 @@ export async function findPeople(db, viewer, raw) {
   const [owners,dogs] = await db.batch([
     db.prepare(`WITH person AS (SELECT ? AS viewer) SELECT p.id,p.owner_name AS owner
       FROM person,profiles p WHERE ${visible} AND p.owner_name LIKE ? ESCAPE '\\' ORDER BY p.owner_name LIMIT 25`).bind(viewer,pattern),
-    db.prepare(`WITH person AS (SELECT ? AS viewer) SELECT p.id AS profile_id,p.owner_name AS owner,d.id,d.name,d.emoji,d.breed
+    db.prepare(`WITH person AS (SELECT ? AS viewer) SELECT p.id AS profile_id,p.owner_name AS owner,d.id,d.name,d.emoji,d.breed,d.sex
       FROM person,profiles p JOIN dogs d ON d.profile_id=p.id AND d.archived=0
       WHERE ${visible} AND d.name LIKE ? ESCAPE '\\' ORDER BY d.name LIMIT 25`).bind(viewer,pattern),
   ]);
@@ -212,15 +215,21 @@ export async function changeConnection(db, viewer, target, action) {
   }
   const allowed = `NOT ${blocked("person.viewer","person.target")}`;
   if (action==="request") {
-    await db.prepare(`WITH person AS (SELECT ? AS viewer,? AS target)
+    await db.batch([db.prepare(`WITH person AS (SELECT ? AS viewer,? AS target)
       INSERT INTO relationships(first_id,second_id,sender_id,state)
       SELECT min(viewer,target),max(viewer,target),viewer,'pending' FROM person WHERE ${allowed}
-      ON CONFLICT(first_id,second_id) DO NOTHING`).bind(viewer,target).run();
+      ON CONFLICT(first_id,second_id) DO NOTHING`).bind(viewer,target),
+      db.prepare(`INSERT INTO account_notices(account_id,kind,title,details,reference_id,created_at)
+        SELECT account_id,'friend_request','Richiesta di amicizia',coalesce((SELECT owner_name FROM profiles WHERE id=?),''),?,?
+        FROM profiles WHERE id=? AND changes()>0`).bind(viewer,viewer,nowSeconds(),target)]);
     return json({ ok:true });
   }
   if (action==="accept") {
-    const result = await db.prepare(`UPDATE relationships SET state='friends'
-      WHERE first_id=? AND second_id=? AND sender_id=? AND state='pending'`).bind(first,second,target).run();
+    const [result] = await db.batch([db.prepare(`UPDATE relationships SET state='friends'
+      WHERE first_id=? AND second_id=? AND sender_id=? AND state='pending'`).bind(first,second,target),
+      db.prepare(`INSERT INTO account_notices(account_id,kind,title,details,reference_id,created_at)
+        SELECT account_id,'friend_accepted','Amicizia accettata',coalesce((SELECT owner_name FROM profiles WHERE id=?),''),?,?
+        FROM profiles WHERE id=? AND changes()>0`).bind(viewer,viewer,nowSeconds(),target)]);
     return result.meta.changes ? json({ ok:true }) : error("Richiesta non disponibile.",409);
   }
   return error("Azione non disponibile.");

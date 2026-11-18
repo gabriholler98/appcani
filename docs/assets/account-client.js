@@ -1,4 +1,4 @@
-import { startAuthentication,startRegistration } from "./webauthn-vendor.js";
+import { startAuthentication,startRegistration } from "./webauthn-vendor.js?v=8";
 
 const sessionKey = "dogs-in-giro-session-v1";
 const encoder = new TextEncoder();
@@ -99,13 +99,13 @@ export function setupAccounts({ openProfile, showApp, closeApp, currentPushEndpo
 
   function applyAccount(user) {
     account = user;
-    if (!user.profile?.dogs?.length) {
+    if (!user.profile?.dogs?.length&&user.role!=="admin") {
       setView("setup");
       return;
     }
     setView("app");
     byId("currentUser").textContent = "@" + user.username;
-    showApp(user.profile, user.username);
+    showApp(user.profile,user.username,user.role??"member");
   }
 
   async function restore() {

@@ -124,11 +124,12 @@ export async function startAccount(request, env, registering) {
     return json({ token, username }, 201);
   }
 
-  const account = await db.prepare("SELECT id, password_salt, password_hash FROM accounts WHERE username = ?").bind(username).first();
+  const account = await db.prepare("SELECT id, password_salt, password_hash, suspended_until FROM accounts WHERE username = ?").bind(username).first();
   const passwordKey = await derivePasswordKey(proof, account?.password_salt ?? "00000000000000000000000000000000");
   const expected = Uint8Array.from((account?.password_hash ?? "0".repeat(64)).match(/../g), pair => Number.parseInt(pair, 16));
   const valid = await crypto.subtle.verify("HMAC", pepper, expected, passwordKey);
   if (!valid || !account) return error("Nome utente o password non corretti.", 401);
+  if(account.suspended_until>now)return error("Account sospeso. Contatta l’amministrazione.",403);
   return json({ token: await newSession(db, account.id, now), username });
 }
 
@@ -137,7 +138,7 @@ export async function readSession(request, db) {
   if (!token) return null;
   const hash = await tokenHash(token);
   const account = await db.prepare(`
-    SELECT a.id, a.username, p.id AS profileId,
+    SELECT a.id, a.username, a.role, a.suspended_until, p.id AS profileId,
       EXISTS(SELECT 1 FROM dogs d WHERE d.profile_id=p.id AND d.archived=0) AS hasDog
     FROM account_sessions s JOIN accounts a ON a.id = s.account_id
     LEFT JOIN profiles p ON p.account_id = a.id

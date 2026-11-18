@@ -47,21 +47,39 @@ export async function commitNotification(env, ctx, mutation, kind, walkId, param
 }
 
 export function unreadQuery(db, accountId) {
-  return db.prepare("SELECT count(*) AS unread FROM notifications WHERE account_id = ? AND read_at IS NULL AND created_at >= ?")
-    .bind(accountId, now() - retention);
+  return db.prepare(`SELECT
+    (SELECT count(*) FROM notifications WHERE account_id=? AND read_at IS NULL AND created_at>=?)+
+    (SELECT count(*) FROM account_notices WHERE account_id=? AND read_at IS NULL AND created_at>=?) AS unread,
+    (SELECT count(*) FROM relationships r JOIN profiles p ON p.account_id=?
+      WHERE r.state='pending' AND r.sender_id!=p.id AND (r.first_id=p.id OR r.second_id=p.id)) AS friend_requests`)
+    .bind(accountId,now()-retention,accountId,now()-retention,accountId);
 }
 
 export async function listNotifications(db, accountId) {
   const list = db.prepare(`
     SELECT n.id, n.kind, n.created_at, n.read_at, n.walk_id, n.details, w.title
     FROM notifications n JOIN walks w ON w.id = n.walk_id
-    WHERE n.account_id = ? AND n.created_at >= ? ORDER BY n.id DESC LIMIT 30
-  `).bind(accountId, now() - retention);
+    WHERE n.account_id = ? AND n.created_at >= ?
+    UNION ALL SELECT 'a:'||id AS id,kind,created_at,read_at,reference_id AS walk_id,details,title
+    FROM account_notices WHERE account_id=? AND created_at>=?
+    ORDER BY created_at DESC,id DESC LIMIT 30
+  `).bind(accountId,now()-retention,accountId,now()-retention);
   const [items, unread] = await db.batch([list, unreadQuery(db, accountId)]);
   return json({ items: items.results, unread: unread.results[0].unread });
 }
 
 export async function markNotificationsRead(db, accountId, data) {
+  const ids=data?.ids??[data?.id];
+  if(Array.isArray(ids)&&ids.length&&ids.length<=30&&ids.every(id=>typeof id==="string"&&/^a:\d+$/.test(id)||Number.isSafeInteger(id)&&id>0)) {
+    const legacy=ids.filter(Number.isSafeInteger),accounts=ids.filter(id=>typeof id==="string").map(id=>Number(id.slice(2)));
+    await db.batch([
+      db.prepare("UPDATE notifications SET read_at=? WHERE account_id=? AND read_at IS NULL AND id IN(SELECT value FROM json_each(?))")
+        .bind(now(),accountId,JSON.stringify(legacy)),
+      db.prepare("UPDATE account_notices SET read_at=? WHERE account_id=? AND read_at IS NULL AND id IN(SELECT value FROM json_each(?))")
+        .bind(now(),accountId,JSON.stringify(accounts)),
+    ]);
+    return json(await unreadQuery(db,accountId).first());
+  }
   const through = data?.through;
   const id = data?.id??through;
   if (!Number.isSafeInteger(id) || id < 1) return error("Avvisi non validi.");

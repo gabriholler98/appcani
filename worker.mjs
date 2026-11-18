@@ -10,9 +10,10 @@ import {
   archiveWalks, cancelWalk, changeRequest, deleteArchivedWalk, joinWalk, listWalks,
   readMessages, reportContent, saveWalk, sendMessage, walkDetails,
 } from "./walks.mjs";
-import { changeDevice, forgetLogoutDevice, listNotifications, markNotificationsRead, pushSettings, testDevice, unreadQuery } from "./notifications.mjs";
+import { changeDevice, deliverPush, forgetLogoutDevice, listNotifications, markNotificationsRead, pushSettings, testDevice, unreadQuery } from "./notifications.mjs";
 import { dogPhoto } from "./photos.mjs";
 import { listPasskeys,loginOptions,registerOptions,registerPasskey,removePasskey,verifyPasskey } from "./passkeys.mjs";
+import {adminAction,adminPerson,adminRead,adminWalk} from "./admin.mjs";
 
 async function handle(request,env,url,ctx) {
   if (!env.DB || !env.LOCATION_MASK_KEY || !env.PASSWORD_PEPPER) return error("Archivio online non disponibile.",503);
@@ -27,11 +28,24 @@ async function handle(request,env,url,ctx) {
   const db=env.DB;
   const account=await readSession(request,db);
   if (!account) return error("Accedi al tuo account per continuare.",401);
+  if(account.suspended_until>Date.now()/1000)return error("Account sospeso. Contatta l’amministrazione.",403);
   if (endpoint==="POST /api/auth/logout") {
     await forgetLogoutDevice(db,account,await readBody(request));
     return endSession(db,account);
   }
-  if (endpoint==="GET /api/auth/me") return json({username:account.username,profile:await accountProfile(db,account.id)});
+  if (endpoint==="GET /api/auth/me") return json({username:account.username,role:account.role,profile:await accountProfile(db,account.id)});
+  if(url.pathname.startsWith("/api/admin/")) {
+    if(account.role!=="admin")return error("Accesso riservato all’amministratore.",403);
+    if(endpoint==="GET /api/admin/list")return adminRead(db,url.searchParams);
+    if(endpoint==="GET /api/admin/person")return adminPerson(db,clean(url.searchParams.get("id"),60));
+    if(endpoint==="GET /api/admin/walk")return adminWalk(db,clean(url.searchParams.get("id"),60));
+    if(endpoint==="POST /api/admin/action")return adminAction(env,ctx,account,await readBody(request));
+    return error("Risorsa non trovata.",404);
+  }
+  if(endpoint==="GET /api/reports/mine") {
+    const {results}=await db.prepare("SELECT id,kind,state,response,created_at,updated_at FROM reports WHERE reporter_id=? ORDER BY created_at DESC LIMIT 50").bind(account.profileId??"").all();
+    return json({reports:results});
+  }
   if (endpoint==="POST /api/auth/recovery-codes") return newRecoveryCodes(env,account,await readBody(request));
   if (endpoint==="POST /api/auth/password") return changePassword(env,account,await readBody(request));
   if (endpoint==="POST /api/auth/logout-all") return signOutDevices(db,account);
@@ -49,7 +63,7 @@ async function handle(request,env,url,ctx) {
     if (endpoint==="POST /api/profile/dogs") return saveDog(db,account,await readBody(request));
     if (endpoint==="POST /api/profile/dogs/remove") return removeDog(db,account,clean((await readBody(request))?.id,60));
   }
-  if (!account.hasDog) return error("Aggiungi almeno un cane al tuo profilo per continuare.",403);
+  if (!account.hasDog&&account.role!=="admin") return error("Aggiungi almeno un cane al tuo profilo per continuare.",403);
   if (url.pathname==="/api/profile/photo" && ["GET","POST","DELETE"].includes(request.method)) return dogPhoto(db,viewer,clean(q.get("id"),60),request);
   switch (endpoint) {
     case "GET /api/walks": return listWalks(env,account,q);
@@ -82,8 +96,17 @@ async function handle(request,env,url,ctx) {
     case "POST /api/notifications/device/enable": return changeDevice(env,account,data,"enable");
     case "POST /api/notifications/device/disable": return changeDevice(env,account,data,"disable");
     case "POST /api/notifications/device/test": return testDevice(env,account,data);
-    case "POST /api/people/relationship": return changeConnection(db,viewer,clean(data?.target_id,60),data?.action);
-    case "POST /api/reports": return reportContent(db,viewer,data);
+    case "POST /api/people/relationship": {
+      const target=clean(data?.target_id,60);
+      const result=await changeConnection(db,viewer,target,data?.action);
+      if(result.ok&&ctx&&["accept","request"].includes(data?.action)) {
+        const changed=await db.prepare("SELECT account_id FROM account_notices WHERE reference_id=? AND kind=? AND created_at>=? AND account_id=(SELECT account_id FROM profiles WHERE id=?) LIMIT 1")
+          .bind(viewer,data.action==="accept"?"friend_accepted":"friend_request",Math.floor(Date.now()/1000)-2,target).first();
+        if(changed)ctx.waitUntil(deliverPush(env,[changed.account_id],fetch,{kind:data.action==="accept"?"friend_accepted":"friend_request"}).catch(()=>{}));
+      }
+      return result;
+    }
+    case "POST /api/reports": return reportContent(env,ctx,viewer,data);
     default: return error("Risorsa non trovata.",404);
   }
 }

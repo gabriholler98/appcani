@@ -1,4 +1,5 @@
 export const byId = id => document.getElementById(id);
+import { appendDogAvatar } from "./dog-avatars.js?v=8";
 
 export function element(tag,text="",className="") {
   const node=document.createElement(tag);
@@ -48,7 +49,8 @@ export function schedule(walk) {
   return dateFormat.format(new Date(walk.day+"T12:00:00Z"))+" · "+walk.time+" · "+duration;
 }
 
-export const dogNames = dogs => (dogs??[]).map(dog=>dog.name).join(", ");
+export const sexSymbol=sex=>sex==="male"?"♂":sex==="female"?"♀":"";
+export const dogNames = dogs => (dogs??[]).map(dog=>[dog.name,sexSymbol(dog.sex)].filter(Boolean).join(" ")).join(", ");
 export const slots = number => number===1 ? "1 posto libero" : number>1 ? number+" posti liberi" : "Al completo";
 
 export function dogChoices(target,dogs,selected=[]) {
@@ -59,7 +61,9 @@ export function dogChoices(target,dogs,selected=[]) {
     input.name="dog_ids";
     input.value=dog.id;
     input.checked=selected.includes(dog.id);
-    label.append(input,document.createTextNode(dog.emoji+" "+dog.name+" · "+dog.size));
+    label.append(input);
+    if (!appendDogAvatar(label,dog.emoji)) label.append(document.createTextNode((dog.emoji??"🐕")+" "));
+    label.append(document.createTextNode([dog.name,sexSymbol(dog.sex)].filter(Boolean).join(" ")+" · "+dog.size));
     return label;
   }));
 }

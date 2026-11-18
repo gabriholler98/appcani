@@ -11,7 +11,7 @@ const origin = "https://gabriholler98.github.io";
 
 function database() {
   const sqlite = new DatabaseSync(":memory:");
-  for (const migration of ["0000_shared_walks", "0001_chat_and_reveal", "0002_accounts", "0003_walk_archive", "0004_notifications", "0005_owners_and_walks", "0006_passkeys"]) {
+  for (const migration of ["0000_shared_walks", "0001_chat_and_reveal", "0002_accounts", "0003_walk_archive", "0004_notifications", "0005_owners_and_walks", "0006_passkeys","0007_dog_avatar_migration","0008_administration","0009_dog_sex"]) {
     sqlite.exec(readFileSync(new URL("../drizzle/" + migration + ".sql", import.meta.url), "utf8"));
   }
   const db = {
@@ -256,11 +256,11 @@ test("multiple dogs, available seats, edits, friends, privacy and account recove
   assert.equal(detail.walk.reveal_exact,false);
   assert.equal(detail.walk.revision,2);
   assert.ok(!(JSON.stringify(detail).includes("Ingresso sud")));
-  const change=(await call("notifications",{token:guest.token})).items[0];
+  const change=(await call("notifications",{token:guest.token})).items.find(item=>item.kind==="changed");
   assert.equal(change.kind,"changed");
   assert.match(change.details,/10:00.*11:00/);
   await call("notifications/read",{token:guest.token,data:{id:change.id}});
-  assert.ok((await call("notifications",{token:guest.token})).items[0].read_at);
+  assert.ok((await call("notifications",{token:guest.token})).items.find(item=>item.id===change.id).read_at);
   await call("profile/dogs/remove",{token:guest.token,data:{id:second.id},status:409});
   await call("requests/withdraw",{token:guest.token,data:{walk_id:walkId}});
   assert.equal((await call("walks",{token:waiting.token})).walks[0].available_places,2);
@@ -296,4 +296,61 @@ test("walk length uses elapsed minutes and the Italian time zone", () => {
   assert.equal(walkTiming("2026-03-29", "02:30", 60), null);
   assert.equal(walkTiming("2026-02-30", "11:00", 60), null);
   assert.equal(walkTiming("2026-10-25", "02:30", 60).startsAt, Date.parse("2026-10-25T00:30:00Z") / 1000);
+});
+
+test("administration, reports, dog-free organizer and location search before limiting results",async()=>{
+  const {sqlite,db}=database();
+  const {call}=makeApi(db);
+  const proof=await passwordProof("moderatore","una-frase-per-il-test");
+  const admin=(await call("auth/register",{data:{username:"moderatore",proof},status:201})).token;
+  const member=(await call("auth/register",{data:{username:"iscritto",proof:"1".repeat(64)},status:201})).token;
+  const fields={owner:"Anna",firstDog:{name:"Luna",breed:"Meticcio",birth:2022,size:"Media",energy:"Media",emoji:"avatar:meticcio",sex:"female"}};
+  const memberProfile=(await call("profile",{token:member,data:fields})).profile;
+  assert.equal(memberProfile.dogs[0].sex,"female");
+  await call("profile/dogs",{token:member,data:{...fields.firstDog,id:memberProfile.dogs[0].id,sex:"invalid"},status:400});
+  const owner=(await call("profile",{token:admin,data:{...fields,owner:"Amministrazione"}})).profile;
+  const accountId=sqlite.prepare("SELECT id FROM accounts WHERE username='moderatore'").get().id;
+  const memberId=sqlite.prepare("SELECT id FROM accounts WHERE username='iscritto'").get().id;
+  sqlite.prepare("UPDATE accounts SET role='admin' WHERE id=?").run(accountId);
+  sqlite.prepare("UPDATE dogs SET archived=1 WHERE profile_id=?").run(owner.id);
+  assert.equal((await call("auth/me",{token:admin})).profile.dogs.length,0);
+  assert.equal((await call("auth/me",{token:admin})).role,"admin");
+  const data={title:"Passeggiata amministrazione",city:"Trento",area_label:"Ingresso del parco",
+    day:new Date(Date.now()+3*86400000).toISOString().slice(0,10),time:"10:00",duration_minutes:60,max:3,
+    dog_ids:[],latitude:46.07,longitude:11.12};
+  const {id}=await call("walk",{token:admin,data,status:201});
+  await call("admin/list",{token:member,status:403});
+  await call("join",{token:member,data:{walk_id:id,dog_ids:[memberProfile.dogs[0].id]},status:201});
+  await call("reports",{token:member,data:{kind:"walk",id,reason:"Un contenuto da controllare"}});
+  const report=(await call("admin/list?section=reports",{token:admin})).items[0];
+  assert.match(report.snapshot,/Passeggiata amministrazione/);
+  await call("admin/action",{token:admin,data:{action:"walk-edit",target_id:id,...data,day:data.day,time:"11:00",max_participants:3,revision:1,reason:"Rettifica dell’orario"}});
+  await call("admin/action",{token:admin,data:{action:"report",target_id:report.id,state:"resolved",reason:"Abbiamo controllato e corretto."}});
+  assert.equal((await call("reports/mine",{token:member})).reports[0].state,"resolved");
+  assert.equal((await call("notifications",{token:member})).items.filter(item=>item.kind==="report").length,1);
+  await call("admin/action",{token:admin,data:{action:"warn",target_id:memberId,reason:"Ti invitiamo a rispettare gli altri utenti."}});
+  const notice=(await call("notifications",{token:member})).items.find(item=>item.kind==="admin");
+  await call("notifications/read",{token:member,data:{id:notice.id}});
+  assert.ok((await call("notifications",{token:member})).items.find(item=>item.id===notice.id).read_at);
+  assert.ok((await call("admin/list?section=audit",{token:admin})).items.length>=3);
+
+  const record=sqlite.prepare("SELECT * FROM walks WHERE id=?").get(id);
+  const columns=Object.keys(record);
+  const insert=sqlite.prepare("INSERT INTO walks("+columns.join(",")+") VALUES("+columns.map(()=>"?").join(",")+")");
+  for(let i=0;i<120;i++) {
+    const changed={...record,id:"far-"+i,title:"Lontana "+i,public_latitude:40,public_longitude:15,day:"2026-11-18"};
+    insert.run(...columns.map(key=>changed[key]));
+  }
+  const nearby=await call("walks?lat=46.07&lon=11.12&radius=5",{token:member});
+  assert.equal(nearby.walks.length,1);
+  assert.equal(nearby.walks[0].id,id);
+  assert.equal(nearby.more,false);
+  await call("walks?lat=xxx&lon=11&radius=5",{token:member,status:400});
+  await call("admin/action",{token:admin,data:{action:"suspend",target_id:memberId,days:7,reason:"Sospensione di prova."}});
+  await call("auth/me",{token:member,status:401});
+  await call("auth/login",{data:{username:"iscritto",proof:"1".repeat(64)},status:403});
+  await call("admin/action",{token:admin,data:{action:"resume",target_id:memberId,reason:"Rientro consentito."}});
+  const newMember=(await call("auth/login",{data:{username:"iscritto",proof:"1".repeat(64)}})).token;
+  assert.ok((await call("auth/me",{token:newMember})).profile);
+  sqlite.close();
 });

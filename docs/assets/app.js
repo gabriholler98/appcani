@@ -1,8 +1,12 @@
-import { setupAccounts } from "./account-client.js?v=4";
-import { currentPushEndpoint, setupNotifications } from "./notification-client.js?v=4";
-import { setupPeople } from "./people-ui.js";
-import { setupChat } from "./chat.js";
-import { announce,byId,busy,button,dogChoices,dogNames,element,fill,row,schedule,slots,status } from "./ui.js";
+import { setupAccounts } from "./account-client.js?v=8";
+import { currentPushEndpoint, setupNotifications } from "./notification-client.js?v=8";
+import { setupPeople } from "./people-ui.js?v=8";
+import { setupChat } from "./chat.js?v=8";
+import { announce,byId,busy,button,dogChoices,dogNames,element,fill,row,schedule,slots,status,sexSymbol } from "./ui.js?v=8";
+import { appendDogAvatar } from "./dog-avatars.js?v=8";
+import {setupLocation} from "./location-ui.js?v=8";
+import {setupAdmin} from "./admin-ui.js?v=8";
+import {setupScreenNavigation} from "./screen-navigation.js?v=8";
 
 const app=byId("appView");
 const filtersForm=byId("mapFilters");
@@ -10,7 +14,7 @@ const walkForm=byId("walkForm");
 const joinForm=byId("joinForm");
 const detailsDialog=byId("detailsDialog");
 const summaryDialog=byId("summaryDialog");
-const sections={explore:"Esplora",plans:"Le mie passeggiate",people:"Cerca",profile:"Profilo"};
+const sections={explore:"Esplora",plans:"Passeggiate",people:"Amici",profile:"Profilo",admin:"Amministrazione"};
 const requestLabels={pending:"In attesa",accepted:"Confermata",withdrawn:"Ritirata",rejected:"Rifiutata"};
 const coordinates=[46.43,11.25];
 const tileUrl="https://tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -21,12 +25,26 @@ let nearby=null, filterVersion=0;
 let loadId=0,detailId=0,quiet=0, refreshTimer,walkSignature="";
 let map,markers,meetingMap,meetingMarker,place,editing,summary,joinTarget,reportTarget;
 let addressId=0;
+let role="member",accountUsername="";
+let displayedWalks=[];
 
 const accounts=setupAccounts({
   openProfile:known=>people.openDog(null,true,known?.owner??""),
   showApp,closeApp,currentPushEndpoint,announce,
 });
 const api=accounts.api;
+const screenNavigation=setupScreenNavigation(next=>{
+  if(profile&&Object.hasOwn(sections,next)&&(next!=="admin"||role==="admin"))navigate(next,{focus:false,record:false});
+});
+const administration=setupAdmin({api,username:()=>accountUsername});
+const searchLocation=setupLocation(area=>{
+  nearby=area;
+  walkSignature="";
+  displayedWalks=[];
+  byId("mapPanel").hidden=!area||!mapView;
+  if(area&&map)map.setView([area.lat,area.lon],area.radius<=5?12:10);
+  if(profile&&page==="explore")void loadPage(true);
+});
 const people=setupPeople({
   api,current:()=>profile,setProfile:accounts.setProfile,
   saveFirst:async data=>(await api("/api/profile",{data})).profile,
@@ -34,17 +52,25 @@ const people=setupPeople({
 });
 const chat=setupChat(api,openReport);
 const notifications=setupNotifications(api,{
-  openItem: item=>item.kind==="join"||item.kind==="withdrawn" ? navigate("plans",{plan:"received"}) : openDetails(item.walk_id,item.kind==="chat"),
+  openItem:item=>{
+    if(["friend_request","friend_accepted"].includes(item.kind))return navigate("people");
+    if(item.kind==="report")return role==="admin"?navigate("admin"):byId("openMyReports").click();
+    if(item.kind==="admin")return;
+    return item.kind==="join"||item.kind==="withdrawn"?navigate("plans",{plan:"received"}):openDetails(item.walk_id,item.kind==="chat");
+  },
   preferences:()=>profile?.push_muted??[],
   setPreferences:muted=>{if(profile)profile.push_muted=muted;},
 });
 
-function showApp(data,username) {
+function showApp(data,username,accountRole) {
   const first=!profile;
   profile=data;
+  role=accountRole??role;accountUsername=username;
+  byId("openAdmin").hidden=role!=="admin";
+  byId("addDog").hidden=role==="admin";
   app.hidden=false;
   byId("currentUser").textContent="@"+username;
-  if (first) navigate("explore",{focus:false});
+  if (first) {searchLocation.restore(profile.id);navigate("explore",{focus:false});}
   else if (page==="profile") people.renderProfile();
   const url=new URL(location.href);
   if (url.searchParams.get("avvisi")==="1") {
@@ -62,6 +88,8 @@ function closeApp() {
   clearTimeout(refreshTimer);
   for(const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
   people.reset();
+  screenNavigation.reset();
+  searchLocation.reset();administration.reset();role="member";accountUsername="";
   notifications.reset();
   filters=new URLSearchParams();
   nearby=null;
@@ -78,7 +106,8 @@ function closeApp() {
   markers?.clearLayers();
 }
 
-function navigate(next,{focus=true,plan:nextPlan}={}) {
+function navigate(next,{focus=true,plan:nextPlan,record=true}={}) {
+  if(record&&next!==page)screenNavigation.page(next);
   page=next;
   if (nextPlan) plan=nextPlan;
   for(const id of Object.keys(sections)) byId(id+"Page").hidden=id!==page;
@@ -94,19 +123,24 @@ function navigate(next,{focus=true,plan:nextPlan}={}) {
   }
   if (next==="profile") people.renderProfile();
   if (next==="people") void people.refreshConnections();
+  if(next==="admin")void administration.refresh();
   if (next==="explore") updateMapView();
   if (next==="plans") updatePlanControls();
   quiet=0;
   void loadPage(true);
 }
+byId("openAdmin").onclick=()=>navigate("admin");
 document.querySelectorAll("[data-page]").forEach(control=>{control.onclick=()=>navigate(control.dataset.page);});
 document.querySelectorAll("[data-close]").forEach(control=>{control.onclick=()=>byId(control.dataset.close).close();});
 
 function renderMap() {
   if (map || !window.L || !mapView || byId("explorePage").hidden) return;
   map=window.L.map("map",{zoomControl:false,scrollWheelZoom:false})
-    .setView(coordinates,window.matchMedia("(max-width: 830px)").matches?8:9);
-  const updateZoneSymbols=()=>byId("map").classList.toggle("zone-overview",map.getZoom()<13);
+    .setView(nearby?[nearby.lat,nearby.lon]:coordinates,nearby?(nearby.radius<=5?12:10):window.matchMedia("(max-width: 830px)").matches?8:9);
+  const updateZoneSymbols=()=>{
+    byId("map").classList.toggle("zone-overview",map.getZoom()<13);
+    if(markers)drawMapWalks(displayedWalks);
+  };
   map.on("zoomend",updateZoneSymbols);
   updateZoneSymbols();
   window.L.control.zoom({position:"topright"}).addTo(map);
@@ -118,7 +152,7 @@ function renderMap() {
 function updateMapView() {
   const navigable=window.L || document.readyState!=="complete";
   byId("mapView").disabled=!navigable;
-  const show=mapView && navigable;
+  const show=mapView && navigable && Boolean(nearby);
   byId("mapPanel").hidden=!show;
   byId("mapView").setAttribute("aria-pressed",String(Boolean(show)));
   byId("listView").setAttribute("aria-pressed",String(!show));
@@ -141,26 +175,18 @@ filtersForm.onsubmit=event=>{
   void busy(event.submitter,async()=>{
     const data=new FormData(filtersForm);
     const next=new URLSearchParams();
-    for (const key of ["city","day","before","size"]) {
+    for (const key of ["day","before","size"]) {
       const value=data.get(key).trim();
       if(value) next.set(key,value);
     }
     if (next.has("day") && next.has("before") && next.get("day")>next.get("before")) throw new Error("La data finale dev’essere successiva o uguale alla data iniziale.");
-    for (const key of ["friends","full"]) if(data.has(key))next.set(key,"1");
-    const radius=Number(data.get("distance"));
-    let around=null;
-    if (radius) {
-      if (!navigator.geolocation) throw new Error("Posizione non disponibile su questo dispositivo.");
-      const position=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,
-        {maximumAge:120000,timeout:8000})).catch(()=>{throw new Error("Posizione non disponibile. Consenti l’accesso o togli il filtro distanza.");});
-      around={ latitude:position.coords.latitude,longitude:position.coords.longitude,radius };
-    }
+    if(data.has("full"))next.set("full","1");
+    if(byId("onlyFriends").checked)next.set("friends","1");
     if (version!==filterVersion || !profile) return;
     filters=next;
-    nearby=around;
     filtersForm.hidden=true;
     byId("toggleFilters").setAttribute("aria-expanded","false");
-    const count=filters.size+Number(Boolean(nearby));
+    const count=filters.size;
     byId("toggleFilters").textContent=count?"Filtri ("+count+")":"Filtri";
     void loadPage(true);
   },failure=>{if(version===filterVersion)status(feedback,failure.message);});
@@ -168,9 +194,13 @@ filtersForm.onsubmit=event=>{
 filtersForm.onreset=()=>{
   filterVersion+=1;
   filters=new URLSearchParams();
-  nearby=null;
+  if(byId("onlyFriends").checked)filters.set("friends","1");
   status(byId("filterLocationStatus"));
   byId("toggleFilters").textContent="Filtri";
+  void loadPage(true);
+};
+byId("onlyFriends").onchange=event=>{
+  if(event.target.checked)filters.set("friends","1");else filters.delete("friends");
   void loadPage(true);
 };
 
@@ -208,7 +238,9 @@ function walkCard(walk) {
   }
   card.append(pills);
   const controls=row(button("Vedi dettagli",()=>openDetails(walk.id)));
-  if (walk.can_chat) controls.append(button("Apri chat",()=>chat.open(walk)));
+  if(walk.can_chat||(walk.status==="open"&&(walk.is_host||walk.request_status==="accepted")))controls.append(button("Apri chat",()=>chat.open(walk)));
+  if(walk.request_status==="pending")card.append(element("p","Attendi la conferma dell’organizzatore.","muted"));
+  if(walk.request_status==="accepted")card.append(element("p","Partecipazione confermata. Trovi il ritrovo e i partecipanti nei dettagli.","muted"));
   if (walk.is_host && !isLive(walk)) controls.append(button("Elimina",control=>{
     if (confirm("Eliminare la passeggiata, le richieste e la chat anche dall’archivio dei partecipanti?")) {
       return mutate(control,"/api/walks/delete",{walk_id:walk.id},"Passeggiata eliminata.");
@@ -219,14 +251,7 @@ function walkCard(walk) {
 }
 
 function showExplore(events) {
-  const walks=nearby?events.filter(walk=>{
-    const rad=Math.PI/180;
-    const latitude=walk.public_latitude??walk.latitude;
-    const longitude=walk.public_longitude??walk.longitude;
-    const a=Math.sin((latitude-nearby.latitude)*rad/2)**2+
-      Math.cos(latitude*rad)*Math.cos(nearby.latitude*rad)*Math.sin((longitude-nearby.longitude)*rad/2)**2;
-    return 12742*Math.asin(Math.sqrt(Math.min(1,a)))<=nearby.radius;
-  }):events;
+  const walks=events;
   const signature=JSON.stringify(walks);
   if (signature===walkSignature && byId("walks").childElementCount) return false;
   walkSignature=signature;
@@ -234,15 +259,72 @@ function showExplore(events) {
     element("p",filters.size||nearby?"Nessuna passeggiata corrisponde ai filtri.":"Nessuna passeggiata disponibile. Puoi organizzarne una con Crea.","empty"),
   ]));
   status(byId("exploreStatus"),walks.length===1?"1 passeggiata":walks.length+" passeggiate");
-  if (!markers) return true;
+  displayedWalks=walks;
+  drawMapWalks(walks);
+  return true;
+}
+
+function drawMapWalks(walks) {
+  if(!markers)return;
   markers.clearLayers();
   const L=window.L;
+  const cells=new Map();
   for(const walk of walks) {
+    const point=[walk.public_latitude??walk.latitude,walk.public_longitude??walk.longitude];
+    if(!point.every(Number.isFinite))continue;
+    const pixel=map.project(point,map.getZoom());
+    const key=Math.floor(pixel.x/64)+":"+Math.floor(pixel.y/64);
+    if(!cells.has(key))cells.set(key,[]);
+    cells.get(key).push(walk);
+  }
+  const grouped=new Set();
+  for(const group of cells.values()) {
+    if(group.length<2)continue;
+    const points=group.map(walk=>[walk.public_latitude??walk.latitude,walk.public_longitude??walk.longitude]);
+    const center=L.latLngBounds(points).getCenter();
+    const popup=element("div","","map-popup map-cluster-list");
+    popup.append(element("strong",group.length+" passeggiate in questa zona"));
+    for(const walk of group) {
+      grouped.add(walk.id);
+      L.circle([walk.public_latitude??walk.latitude,walk.public_longitude??walk.longitude],
+        {radius:zoneRadius,color:"#075b43",weight:2,fillOpacity:.12,interactive:false}).addTo(markers);
+      popup.append(button(walk.title+" · "+schedule(walk),()=>openDetails(walk.id)));
+    }
+    popup.append(button("Ingrandisci zona",()=>{
+      map.closePopup();map.setView(center,Math.min(17,map.getZoom()+2));
+    }));
+    const count=element("span",String(group.length),"map-cluster");
+    L.marker(center,{title:group.length+" passeggiate",alt:group.length+" passeggiate",
+      icon:L.divIcon({className:"map-pin",html:count,iconSize:[38,38],iconAnchor:[19,19]})}).addTo(markers).bindPopup(popup);
+  }
+  for(const walk of walks) {
+    if(grouped.has(walk.id))continue;
     const point=[walk.public_latitude??walk.latitude,walk.public_longitude??walk.longitude];
     if (!point.every(Number.isFinite)) continue;
     const zone=L.circle(point,{radius:zoneRadius,color:"#075b43",weight:3,dashArray:"5 4",
       fillColor:"#2dbc85",fillOpacity:.24,interactive:false}).addTo(markers);
-    const icon=element("span",walk.emoji??"🐕","map-dog");
+    const icon=element("span","","map-dog");
+    if (!appendDogAvatar(icon,walk.emoji)) icon.textContent=walk.emoji??"🐕";
+    if(!walk.dogs.length) {
+      const administrationIcon=element("img");administrationIcon.src="./assets/dogs-in-giro-miniatura-light.png?v=2";administrationIcon.alt="";
+      icon.replaceChildren(administrationIcon);
+    }
+    const lead=walk.dogs[0];
+    const sex=sexSymbol(lead?.sex);
+    if(sex) {
+      const symbol=element("span",sex,"map-dog-sex");
+      symbol.setAttribute("aria-label",lead.sex==="male"?"Maschio":"Femmina");icon.append(symbol);
+    }
+    if(lead?.photo)void people.photoUrl(lead.id).then(url=>{
+      if(!url||!icon.isConnected)return;
+      const image=element("img");image.src=url;image.alt="";
+      const badges=[...icon.querySelectorAll(".map-dog-count,.map-dog-sex")];
+      icon.replaceChildren(image,...badges);
+    });
+    if(walk.dogs.length>1) {
+      const badge=element("b","+"+(walk.dogs.length-1),"map-dog-count");
+      icon.append(badge);
+    }
     const popup=element("div","","map-popup");
     popup.append(element("strong",walk.title),element("p",schedule(walk)),element("p",slots(walk.available_places)),
       button("Inquadra zona di 500 m",()=>{
@@ -254,7 +336,6 @@ function showExplore(events) {
     L.marker(point,{title:label,alt:label,
       icon:L.divIcon({className:"map-pin",html:icon,iconSize:[35,35],iconAnchor:[17,17]})}).addTo(markers).bindPopup(popup);
   }
-  return true;
 }
 
 function requestCard(request) {
@@ -295,9 +376,16 @@ function scheduleRefresh() {
 async function loadPage(force=false) {
   clearTimeout(refreshTimer);
   if (!profile || document.hidden) return;
+  if(page==="explore"&&!nearby) {
+    byId("walks").replaceChildren();
+    markers?.clearLayers();status(byId("exploreStatus"));
+    scheduleRefresh();return;
+  }
   const id=++loadId;
   const current=page, currentPlan=plan;
-  const endpoint=current==="explore"?"/api/walks?"+filters:current==="plans"?
+  const query=new URLSearchParams(filters);
+  if(nearby){query.set("lat",nearby.lat);query.set("lon",nearby.lon);query.set("radius",nearby.radius);}
+  const endpoint=current==="explore"?"/api/walks?"+query:current==="plans"?
     currentPlan==="archive"?"/api/walks/archive?filter="+archive:"/api/walks?view=mine":"/api/notifications?count=1";
   if (force && current==="plans") status(byId("plansStatus"),"Caricamento…");
   try {
@@ -305,6 +393,10 @@ async function loadPage(force=false) {
     if (id!==loadId) return;
     const unread=result.unread_notifications??result.unread;
     notifications.updateUnread(unread);
+    if(Number.isInteger(result.friend_requests)){
+      byId("friendsBadge").textContent=String(result.friend_requests);
+      byId("friendsBadge").hidden=result.friend_requests===0;
+    }
     if (result.requests) {
       const pending=result.requests.filter(item=>item.status==="pending").length;
       byId("requestBadge").textContent=String(pending);
@@ -312,6 +404,7 @@ async function loadPage(force=false) {
     }
     if (current==="explore") {
       if (showExplore(result.walks)) quiet=0; else quiet+=1;
+      if(result.more)status(byId("exploreStatus"),"Prime 100 passeggiate · restringi il raggio o le date per affinare i risultati.");
     } else if (current==="plans" && currentPlan===plan) {
       const signature=JSON.stringify([plan,archive,result.walks,result.requests]);
       if (force || byId("plansList").dataset.signature!==signature) {
@@ -443,7 +536,8 @@ function openWalkForm(walk=null) {
   walkForm.elements.day.min=localDay();
   walkForm.elements.day.value=localDay();
   const dogs=profile.dogs;
-  dogChoices(byId("hostDogs"),dogs,walk?walk.dogs.map(dog=>dog.id):[dogs[0].id]);
+  dogChoices(byId("hostDogs"),dogs,walk?walk.dogs.map(dog=>dog.id):dogs.length?[dogs[0].id]:[]);
+  byId("hostDogs").closest("fieldset").hidden=role==="admin"&&!dogs.length;
   if (walk) {
     fill(walkForm,{...walk,max:walk.max_participants,address:walk.exact_area},["title","day","time","duration_minutes","max","description","address"]);
   }
@@ -505,7 +599,7 @@ walkForm.onsubmit=event=>{
   const data=new FormData(walkForm);
   const dog_ids=data.getAll("dog_ids");
   const message=walkForm.querySelector(".form-error");
-  if(!dog_ids.length) return status(message,"Seleziona almeno un cane.");
+  if(!dog_ids.length&&role!=="admin") return status(message,"Seleziona almeno un cane.");
   if(Number(data.get("max"))<dog_ids.length) return status(message,"La capienza deve includere tutti i tuoi cani selezionati.");
   if(!place) return status(message,"Scegli un luogo suggerito o conferma un indirizzo.");
   status(message);

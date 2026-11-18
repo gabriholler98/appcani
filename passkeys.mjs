@@ -91,10 +91,11 @@ export async function verifyPasskey(env,data) {
   const stored=await consumeChallenge(db,data,"login","");
   const id=data?.response?.id;
   if (!stored || typeof id!=="string" || !idPattern.test(id)) return error("Passkey non valida o richiesta scaduta.",401);
-  const row=await db.prepare(`SELECT a.id AS account_id,a.username,p.public_key,p.counter
+  const row=await db.prepare(`SELECT a.id AS account_id,a.username,a.suspended_until,p.public_key,p.counter
     FROM passkeys p JOIN accounts a ON a.id=p.account_id WHERE p.id=?`).bind(id).first();
   const userHandle=data.response.response?.userHandle;
   if (!row || (userHandle && userHandle!==b64(utf8.encode(row.account_id)))) return error("Passkey non riconosciuta.",401);
+  if(row.suspended_until>nowSeconds())return error("Account sospeso. Contatta l’amministrazione.",403);
   let counter;
   try {
     const result=await verifyAuthenticationResponse({

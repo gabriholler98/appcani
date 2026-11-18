@@ -23,6 +23,10 @@ Le passkey richiedono la migrazione `0006_passkeys.sql`. Vengono registrate per 
 
 ## Notifiche
 
+La migrazione `0008_administration` introduce il ruolo amministratore, sospensioni, segnalazioni con copia del contenuto, avvisi di account e registro degli interventi. Il ruolo viene assegnato tramite database all’account identificato dal proprietario del progetto. Un amministratore può accedere e organizzare passeggiate senza cani.
+
+La ricerca usa un punto e un raggio scelti dall’utente. La distanza approssimativa viene verificata sul server, sulle coordinate pubbliche, prima del limite di 100 risultati. Il punto di ricerca resta nelle preferenze locali del dispositivo.
+
 La campanella mostra gli avvisi degli ultimi 30 giorni. Le notifiche push sono facoltative e si attivano su ciascun dispositivo dalla campanella. Su iPhone e iPad occorre aprire l’app dalla schermata Home.
 
 Per abilitare le push, imposta sul Worker il segreto `VAPID_PRIVATE_JWK` con una chiave privata ECDSA P‑256 in formato JWK. Conserva la stessa chiave tra le pubblicazioni: i browser associano le sottoscrizioni alla sua chiave pubblica.

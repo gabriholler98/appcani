@@ -12,8 +12,8 @@ export const page = `<!doctype html>
       <!-- brand -->
       <nav class="navigation" aria-label="Navigazione principale">
         <button type="button" data-page="explore" aria-current="page"><span aria-hidden="true">⌖</span> Esplora</button>
-        <button type="button" data-page="plans"><span aria-hidden="true">▤</span> Le mie<span class="desktop-only"> passeggiate</span><b id="requestBadge" class="badge" hidden></b></button>
-        <button type="button" data-page="people"><span aria-hidden="true">⌕</span> Cerca</button>
+        <button type="button" data-page="plans"><span aria-hidden="true">▤</span> Passeggiate<b id="requestBadge" class="badge" hidden></b></button>
+        <button type="button" data-page="people"><span aria-hidden="true">⌕</span> Amici<b id="friendsBadge" class="badge" hidden></b></button>
         <button type="button" data-page="profile"><span aria-hidden="true">●</span> Profilo</button>
       </nav>
     </aside>
@@ -24,24 +24,24 @@ export const page = `<!doctype html>
         <button type="button" id="openNotifications" class="secondary toolbar-notice"><span aria-hidden="true">🔔</span><span class="desktop-only"> Notifiche</span><b id="unreadNotifications" class="badge" hidden></b></button>
       </header>
       <section id="explorePage" aria-label="Esplora">
+        <div class="location-bar"><button type="button" id="chooseLocation" class="secondary">Scegli una zona di ricerca</button><label>Raggio<select id="searchRadius" aria-label="Raggio di ricerca"><option value="1">1 km</option><option value="5">5 km</option><option value="10">10 km</option><option selected value="15">15 km</option><option value="30">30 km</option><option value="50">50 km</option><option value="100">100 km</option></select></label></div>
+        <div id="locationPrompt" class="panel flow"><p>Scegli da dove cercare le passeggiate.</p><div class="row"><button id="useDevicePosition" type="button" class="primary">Usa la mia posizione</button><button id="useManualPosition" type="button" class="secondary">Scegli una zona</button></div><p id="locationStatus" class="form-error" role="status" hidden></p></div>
         <div class="explore-bar">
           <div class="segment" aria-label="Vista delle passeggiate">
             <button type="button" id="mapView" aria-pressed="true">Mappa</button>
             <button type="button" id="listView" aria-pressed="false">Lista</button>
           </div>
           <button type="button" id="toggleFilters" class="secondary" aria-expanded="false" aria-controls="mapFilters">Filtri</button>
+          <label class="check quick-friends"><input type="checkbox" id="onlyFriends"> Solo amici</label>
           <button type="button" id="openWalk" class="primary"><span aria-hidden="true">+</span> Crea<span class="desktop-only"> passeggiata</span></button>
         </div>
         <form id="mapFilters" class="panel flow" hidden>
           <div class="form-grid">
-            <label>Città<input name="city" maxlength="40" placeholder="Es. Trento"></label>
             <label>Da<input name="day" type="date"></label>
             <label>A<input name="before" type="date"></label>
             <label>Taglia dei cani dell’organizzatore<select name="size"><option value="">Qualsiasi</option><option>Piccola</option><option>Media</option><option>Grande</option></select></label>
-            <label>Distanza da te<select name="distance"><option value="">Qualsiasi</option><option value="5">Entro 5 km</option><option value="15">Entro 15 km</option><option value="30">Entro 30 km</option></select></label>
           </div>
           <div class="row">
-            <label class="check"><input name="friends" type="checkbox"> Solo amici</label>
             <label class="check"><input name="full" type="checkbox"> Mostra anche le complete</label>
           </div>
           <p id="filterLocationStatus" class="form-error" role="status" hidden></p>
@@ -57,8 +57,8 @@ export const page = `<!doctype html>
       <section id="plansPage" hidden>
         <div class="segment wrap" aria-label="Le mie passeggiate">
           <button type="button" data-plan="scheduled" aria-pressed="true">In programma</button>
-          <button type="button" data-plan="received" aria-pressed="false">Ricevute</button>
-          <button type="button" data-plan="sent" aria-pressed="false">Inviate</button>
+          <button type="button" data-plan="received" aria-pressed="false">Richieste ricevute</button>
+          <button type="button" data-plan="sent" aria-pressed="false">Richieste inviate</button>
           <button type="button" data-plan="archive" aria-pressed="false">Archivio</button>
         </div>
         <div id="archiveFilters" class="segment wrap archive-filters" hidden aria-label="Filtra archivio">
@@ -70,13 +70,16 @@ export const page = `<!doctype html>
         <div id="plansList" class="cards"></div>
       </section>
       <section id="peoplePage" hidden>
+        <div class="segment wrap" id="friendTabs" aria-label="Amicizie"><button type="button" data-friends="friends" aria-pressed="true">I tuoi amici</button><button type="button" data-friends="received" aria-pressed="false">Richieste ricevute</button><button type="button" data-friends="sent" aria-pressed="false">Richieste inviate</button><button type="button" data-friends="search" aria-pressed="false">Cerca persone e cani</button></div>
+        <div id="friendSearch" hidden>
         <form id="searchPeople" class="inline-form">
           <label>Cerca un proprietario o un cane<input name="q" type="search" minlength="2" maxlength="40" required></label>
           <button class="primary">Cerca</button>
         </form>
         <p id="peopleStatus" class="muted" role="status"></p>
         <div id="searchResults" class="flow"></div>
-        <h2>Amici e richieste</h2>
+        </div>
+        <h2 id="friendListHeading">I tuoi amici</h2>
         <div id="connectionsList" class="cards"></div>
       </section>
       <section id="profilePage" hidden>
@@ -87,7 +90,12 @@ export const page = `<!doctype html>
         <div class="section-head"><h2>I tuoi cani</h2><button type="button" id="addDog" class="primary">+ Aggiungi cane</button></div>
         <div id="dogList" class="cards"></div>
         <div class="section-head"><h2>Account</h2><button type="button" data-account-settings class="secondary">Impostazioni</button></div>
+        <div class="row"><button type="button" id="openMyReports" class="secondary">Le tue segnalazioni</button><button type="button" id="openAdmin" class="secondary" hidden>Amministrazione</button></div>
         <button type="button" data-logout class="secondary">Esci</button>
+      </section>
+      <section id="adminPage" hidden><div class="segment wrap"><button type="button" data-admin="reports" aria-pressed="true">Segnalazioni</button><button type="button" data-admin="users" aria-pressed="false">Utenti</button><button type="button" data-admin="walks" aria-pressed="false">Passeggiate</button><button type="button" data-admin="audit" aria-pressed="false">Registro interventi</button></div>
+        <form id="adminSearch" class="inline-form"><label>Ricerca<input name="q" maxlength="40"></label><label id="adminStateLabel">Stato<select name="state"><option value="new">Da esaminare</option><option value="reviewing">In gestione</option><option value="resolved">Risolte</option><option value="dismissed">Archiviate</option></select></label><button class="secondary">Aggiorna</button></form>
+        <p id="adminStatus" role="status" class="muted"></p><div id="adminList" class="cards"></div><div class="actions"><button type="button" id="adminPrevious" class="secondary" hidden>Precedenti</button><button type="button" id="adminNext" class="secondary" hidden>Successivi</button></div>
       </section>
     </main>
   </div>
@@ -120,13 +128,15 @@ export const page = `<!doctype html>
         <label>Razza o mix<input name="breed" required maxlength="45" placeholder="Es. Meticcio"></label>
         <label>Anno di nascita<input name="birth" type="number" min="1995" max="<!-- year -->" required inputmode="numeric"></label>
         <label>Taglia<select name="size"><option>Piccola</option><option selected>Media</option><option>Grande</option></select></label>
+        <label>Sesso del cane<select name="sex" required><option value="">Scegli</option><option value="male">♂ Maschio</option><option value="female">♀ Femmina</option></select></label>
         <label>Energia<select name="energy"><option>Tranquilla</option><option selected>Media</option><option>Alta</option></select></label>
-        <label>Simbolo<select name="emoji"><option>🐕</option><option>🐶</option><option>🐩</option><option>🦮</option></select></label>
       </div>
+      <fieldset class="dog-avatar-field"><legend>Miniatura del cane</legend><p class="muted">Sceglila se non vuoi aggiungere una foto.</p><div id="dogAvatarPicker" class="dog-avatar-picker"></div></fieldset>
       <label>Note utili <span class="muted">(facoltative)</span><textarea name="notes" maxlength="300" rows="2" placeholder="Es. Preferisce gruppi piccoli"></textarea></label>
       <fieldset id="photoFields"><legend>Foto del cane</legend><img id="photoPreview" class="photo-preview" width="112" height="112" alt="Anteprima foto" hidden>
-        <label>Scegli una foto da ritagliare<input name="photo" type="file" accept="image/*"></label>
-        <label class="check" id="removePhoto" hidden><input name="removePhoto" type="checkbox"> Rimuovi la foto attuale</label>
+        <label>Scegli o cambia foto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"></label>
+        <div id="photoCrop" class="flow" hidden><canvas id="photoCanvas" width="384" height="384" aria-label="Anteprima del ritaglio"></canvas><label>Ingrandimento<input id="cropZoom" type="range" min="1" max="3" step=".05" value="1"></label><label>Sposta orizzontalmente<input id="cropX" type="range" min="-1" max="1" step=".02" value="0"></label><label>Sposta verticalmente<input id="cropY" type="range" min="-1" max="1" step=".02" value="0"></label></div>
+        <button type="button" id="removePhoto" class="secondary" hidden>Rimuovi foto</button><p id="photoStatus" role="status" class="muted" hidden></p>
       </fieldset>
       <p class="form-error" role="status" hidden></p>
       <div class="actions"><button type="button" class="secondary" data-close="dogDialog">Annulla</button><button class="primary">Salva cane</button></div>
@@ -211,6 +221,9 @@ export const page = `<!doctype html>
   </article></dialog>
   <div class="toast" id="toast" role="status" hidden></div>
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
-  <script type="module" src="./assets/app.js?v=5"></script>
+  <dialog class="modal" id="locationDialog" aria-labelledby="locationHeading"><article><h2 id="locationHeading">Zona di ricerca</h2><button type="button" id="refreshDevicePosition" class="primary">Usa la mia posizione</button><form id="locationSearch" class="inline-form"><label>Città, indirizzo o luogo<input name="q" required maxlength="140" placeholder="Es. Trento"></label><button class="secondary">Cerca</button></form><p id="manualLocationStatus" role="status" class="form-error" hidden></p><div id="locationChoices" class="flow"></div><div id="locationMap" class="mini-map"></div><p class="muted">Puoi scegliere un punto toccando la mappa.</p><div class="actions"><button type="button" class="secondary" data-close="locationDialog">Indietro</button><button type="button" id="saveLocation" class="primary" disabled>Usa questa zona</button></div></article></dialog>
+  <dialog class="modal" id="myReportsDialog" aria-labelledby="myReportsHeading"><article><h2 id="myReportsHeading">Le tue segnalazioni</h2><div id="myReportsList" class="flow"></div><div class="actions"><button type="button" class="secondary" data-close="myReportsDialog">Indietro</button></div></article></dialog>
+  <dialog class="modal" id="adminDialog" aria-labelledby="adminHeading"><article><h2 id="adminHeading">Intervento amministrativo</h2><form id="adminForm" class="flow"><div id="adminFields" class="flow"></div><label>Motivo o testo dell’avviso<textarea name="reason" rows="3" maxlength="500" required></textarea></label><p class="form-error" role="status" hidden></p><div class="actions"><button type="button" class="secondary" data-close="adminDialog">Indietro</button><button class="primary">Conferma intervento</button></div></form></article></dialog>
+  <script type="module" src="./assets/app.js?v=8"></script>
 </body>
 </html>`;
