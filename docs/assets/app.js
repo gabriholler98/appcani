@@ -304,12 +304,13 @@ function drawMapWalks(walks) {
     const zone=L.circle(point,{radius:zoneRadius,color:"#075b43",weight:3,dashArray:"5 4",
       fillColor:"#2dbc85",fillOpacity:.24,interactive:false}).addTo(markers);
     const icon=element("span","","map-dog");
-    if (!appendDogAvatar(icon,walk.emoji)) icon.textContent=walk.emoji??"🐕";
+    const lead=walk.dogs[0];
+    const selectedAvatar=lead?.emoji??walk.emoji;
+    if(!appendDogAvatar(icon,selectedAvatar))icon.textContent=selectedAvatar??"🐕";
     if(!walk.dogs.length) {
       const administrationIcon=element("img");administrationIcon.src="./assets/dogs-in-giro-miniatura-light.png?v=2";administrationIcon.alt="";
       icon.replaceChildren(administrationIcon);
     }
-    const lead=walk.dogs[0];
     const sex=sexSymbol(lead?.sex);
     if(sex) {
       const symbol=element("span",sex,"map-dog-sex");
