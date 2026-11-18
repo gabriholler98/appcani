@@ -231,7 +231,8 @@ export async function saveWalk(env, ctx, viewer, data, walkId) {
 
 export async function joinWalk(env,ctx,viewer,walkId,data) {
   const db=env.DB;
-  const dogs=await selectDogs(db,viewer,data?.dog_ids);
+  const administrator=await db.prepare("SELECT 1 FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE p.id=? AND a.role='admin'").bind(viewer).first();
+  const dogs=administrator&&Array.isArray(data?.dog_ids)&&!data.dog_ids.length?"[]":await selectDogs(db,viewer,data?.dog_ids);
   if (!dogs) return error("Seleziona almeno un cane del tuo profilo.");
   const mutation=db.prepare(`WITH proposed AS (SELECT ? AS owner,? AS roster)
     INSERT INTO join_requests(id,walk_id,profile_id,created_at,dogs_json)

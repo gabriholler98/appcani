@@ -504,7 +504,8 @@ function openJoin(walk) {
   joinTarget=walk;
   const dogs=profile.dogs;
   dogChoices(byId("joinDogs"),dogs,dogs.length===1?[dogs[0].id]:[]);
-  byId("joinCapacity").textContent=slots(walk.available_places);
+  byId("joinDogs").closest("fieldset").hidden=role==="admin"&&!dogs.length;
+  byId("joinCapacity").textContent=role==="admin"&&!dogs.length?"Partecipi come amministrazione, senza cani.":slots(walk.available_places);
   status(joinForm.querySelector(".form-error"));
   byId("joinDialog").showModal();
 }
@@ -514,7 +515,7 @@ joinForm.onsubmit=event=>{
   status(message);
   const dog_ids=new FormData(joinForm).getAll("dog_ids");
   const current=joinTarget;
-  if (!dog_ids.length) return status(message,"Scegli almeno un cane.");
+  if (!dog_ids.length&&role!=="admin") return status(message,"Scegli almeno un cane.");
   if (dog_ids.length>current.available_places) return status(message,"I cani selezionati superano i posti disponibili.");
   void busy(event.submitter,async()=>{
     await api("/api/join",{data:{walk_id:current.id,dog_ids}});
