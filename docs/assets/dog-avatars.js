@@ -27,6 +27,17 @@ export const dogAvatars = [
 ].map(([value,label,file])=>({value,label,src:`./assets/dog-avatars/${file}.png`}));
 
 const avatars=new Map(dogAvatars.map(avatar=>[avatar.value,avatar]));
+const descriptions=[
+  "Cane marrone con orecchie morbide","Cane chiaro dal pelo corto","Cane dorato dal pelo lungo",
+  "Cane nero e marrone con orecchie dritte","Cane piccolo con grandi orecchie","Cane riccio color miele",
+  "Cane bianco con macchie marroni","Cane con muso corto e grandi orecchie","Cane tricolore con orecchie pendenti",
+  "Cane marrone con orecchie lunghe","Cane bianco dal pelo lungo","Cane bianco e nero",
+  "Cane dal pelo ondulato con orecchie lunghe","Cane dal pelo lungo grigio e marrone",
+  "Cane scuro con muso largo","Cane dal mantello variopinto","Cane beige con muso scuro",
+  "Cane bianco e marrone dal pelo lungo","Cane fulvo con muso squadrato","Cane nero con sopracciglia marroni",
+  "Cane dal pelo corto con orecchie appuntite","Cane maculato dal pelo lungo","Cane bianco con orecchie appuntite",
+  "Cane riccio marrone","Cane grigio e bianco con orecchie dritte",
+];
 
 export const avatarFor=value=>avatars.get(value);
 
@@ -49,23 +60,21 @@ export function renderDogAvatar(target,value) {
 }
 
 export function populateDogAvatarPicker(target) {
-  target.replaceChildren(...dogAvatars.map(avatar=>{
+  target.replaceChildren(...dogAvatars.map((avatar,index)=>{
     const label=document.createElement("label");
     label.className="dog-avatar-choice";
-    label.title=avatar.label;
     const input=document.createElement("input");
     input.type="radio";
     input.name="emoji";
     input.value=avatar.value;
     input.required=true;
+    input.setAttribute("aria-label",descriptions[index]);
     const image=document.createElement("img");
     image.src=avatar.src;
     image.alt="";
     image.width=56;
     image.height=56;
-    const name=document.createElement("span");
-    name.textContent=avatar.label;
-    label.append(input,image,name);
+    label.append(input,image);
     return label;
   }));
 }
