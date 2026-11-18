@@ -4,9 +4,10 @@ import { setupPeople } from "./people-ui.js?v=8";
 import { setupChat } from "./chat.js?v=8";
 import { announce,byId,busy,button,dogChoices,dogNames,element,fill,row,schedule,slots,status,sexSymbol } from "./ui.js?v=8";
 import { appendDogAvatar } from "./dog-avatars.js?v=8";
-import {setupLocation} from "./location-ui.js?v=8";
+import {setupLocation} from "./location-ui.js?v=11";
 import {setupAdmin} from "./admin-ui.js?v=8";
 import {setupScreenNavigation} from "./screen-navigation.js?v=8";
+import {setupSearchArea} from "./search-area.js?v=11";
 
 const app=byId("appView");
 const filtersForm=byId("mapFilters");
@@ -24,6 +25,7 @@ let filters=new URLSearchParams();
 let nearby=null, filterVersion=0;
 let loadId=0,detailId=0,quiet=0, refreshTimer,walkSignature="";
 let map,markers,meetingMap,meetingMarker,place,editing,summary,joinTarget,reportTarget;
+let mapArea;
 let addressId=0;
 let role="member",accountUsername="";
 let displayedWalks=[];
@@ -42,7 +44,8 @@ const searchLocation=setupLocation(area=>{
   walkSignature="";
   displayedWalks=[];
   byId("mapPanel").hidden=!area||!mapView;
-  if(area&&map)map.setView([area.lat,area.lon],area.radius<=5?12:10);
+  mapArea?.update(area);
+  if(area&&map){map.invalidateSize({pan:false});mapArea.fit();}
   if(profile&&page==="explore")void loadPage(true);
 });
 const people=setupPeople({
@@ -93,6 +96,7 @@ function closeApp() {
   notifications.reset();
   filters=new URLSearchParams();
   nearby=null;
+  mapArea?.update(null);
   filterVersion+=1;
   filtersForm.reset();
   filtersForm.hidden=true;
@@ -135,7 +139,7 @@ document.querySelectorAll("[data-close]").forEach(control=>{control.onclick=()=>
 
 function renderMap() {
   if (map || !window.L || !mapView || byId("explorePage").hidden) return;
-  map=window.L.map("map",{zoomControl:false,scrollWheelZoom:false})
+  map=window.L.map("map",{zoomControl:false,scrollWheelZoom:false,worldCopyJump:true})
     .setView(nearby?[nearby.lat,nearby.lon]:coordinates,nearby?(nearby.radius<=5?12:10):window.matchMedia("(max-width: 830px)").matches?8:9);
   const updateZoneSymbols=()=>{
     byId("map").classList.toggle("zone-overview",map.getZoom()<13);
@@ -144,8 +148,12 @@ function renderMap() {
   map.on("zoomend",updateZoneSymbols);
   updateZoneSymbols();
   window.L.control.zoom({position:"topright"}).addTo(map);
+  window.L.control.scale({position:"bottomright",imperial:false}).addTo(map);
   window.L.tileLayer(tileUrl,{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
   markers=window.L.layerGroup().addTo(map);
+  mapArea=setupSearchArea(map,window.L);
+  mapArea.update(nearby);
+  mapArea.fit();
   walkSignature="";
 }
 
@@ -161,6 +169,7 @@ function updateMapView() {
 }
 byId("mapView").onclick=()=>{mapView=true;updateMapView();void loadPage(true);};
 byId("listView").onclick=()=>{mapView=false;updateMapView();};
+byId("showSearchArea").onclick=()=>mapArea?.fit();
 window.addEventListener("load",()=>{if(profile && page==="explore"){updateMapView();void loadPage(true);}});
 
 byId("toggleFilters").onclick=()=>{

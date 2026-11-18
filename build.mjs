@@ -27,7 +27,7 @@ const head = `
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&amp;display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
-  <link rel="stylesheet" href="./assets/brand.css?v=8">`;
+  <link rel="stylesheet" href="./assets/brand.css?v=11">`;
 const brand = `<picture class="brand">
   <source media="(prefers-color-scheme: dark)" srcset="./assets/dogs-in-giro-logo.png">
   <img src="./${lightLogo}" width="2148" height="732" alt="Dogs in Giro">

@@ -49,6 +49,7 @@ export const page = `<!doctype html>
         </form>
         <div class="map-card" id="mapPanel">
           <div id="map" aria-label="Mappa delle passeggiate"></div>
+          <button type="button" id="showSearchArea" class="secondary search-area-fit">Mostra area di ricerca</button>
           <details class="map-info"><summary>Zona approssimativa ⓘ</summary><p>L’anello identifica la zona sulla mappa generale. Tocca il segnaposto e scegli «Inquadra zona di 500 m» per vedere il raggio in scala. Il punto esatto è nei dettagli per chi ha accesso.</p></details>
         </div>
         <p id="exploreStatus" class="muted" role="status"></p>
@@ -224,6 +225,6 @@ export const page = `<!doctype html>
   <dialog class="modal" id="locationDialog" aria-labelledby="locationHeading"><article><h2 id="locationHeading">Zona di ricerca</h2><button type="button" id="refreshDevicePosition" class="primary">Usa la mia posizione</button><form id="locationSearch" class="inline-form"><label>Città, indirizzo o luogo<input name="q" required maxlength="140" placeholder="Es. Trento"></label><button class="secondary">Cerca</button></form><p id="manualLocationStatus" role="status" class="form-error" hidden></p><div id="locationChoices" class="flow"></div><div id="locationMap" class="mini-map"></div><p class="muted">Puoi scegliere un punto toccando la mappa.</p><div class="actions"><button type="button" class="secondary" data-close="locationDialog">Indietro</button><button type="button" id="saveLocation" class="primary" disabled>Usa questa zona</button></div></article></dialog>
   <dialog class="modal" id="myReportsDialog" aria-labelledby="myReportsHeading"><article><h2 id="myReportsHeading">Le tue segnalazioni</h2><div id="myReportsList" class="flow"></div><div class="actions"><button type="button" class="secondary" data-close="myReportsDialog">Indietro</button></div></article></dialog>
   <dialog class="modal" id="adminDialog" aria-labelledby="adminHeading"><article><h2 id="adminHeading">Intervento amministrativo</h2><form id="adminForm" class="flow"><div id="adminFields" class="flow"></div><label>Motivo o testo dell’avviso<textarea name="reason" rows="3" maxlength="500" required></textarea></label><p class="form-error" role="status" hidden></p><div class="actions"><button type="button" class="secondary" data-close="adminDialog">Indietro</button><button class="primary">Conferma intervento</button></div></form></article></dialog>
-  <script type="module" src="./assets/app.js?v=10"></script>
+  <script type="module" src="./assets/app.js?v=11"></script>
 </body>
 </html>`;

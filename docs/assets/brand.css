@@ -175,6 +175,13 @@ legend { padding: 0 5px; font-weight: 800; }
 .mini-map { height: 172px; border-radius: 9px; isolation: isolate; }
 .map-info { position: absolute; z-index: 500; left: 9px; bottom: 18px; max-width: min(270px,calc(100% - 18px)); padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; font-size: .8125rem; box-shadow: var(--shadow); }
 .map-info p { margin-top: 6px; }
+.search-area-mask { fill:#64756f70; }
+.search-area-fit { position:absolute; z-index:500; left:10px; top:10px; max-width:calc(100% - 68px); box-shadow:var(--shadow); font-size:.8125rem; }
+#map .leaflet-control-scale-line { color:var(--ink); background:var(--surface); border-color:var(--muted); }
+@media (prefers-color-scheme: dark) {
+  .search-area-mask { fill:#07110c8c; }
+}
+.map-info { max-width:min(270px,calc(100% - 110px)); }
 .map-dog { display: grid; place-items: center; width: 35px; height: 35px; color: white; border: 2px solid white; border-radius: 50%; background: var(--primary); font-size: 17px; }
 .zone-overview .map-dog { outline: 2px dashed #075b43; outline-offset: 3px; box-shadow: 0 0 0 6px #fff9; }
 .meeting-link { width: fit-content; color: var(--ink); text-underline-offset: .2em; }

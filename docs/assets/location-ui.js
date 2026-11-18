@@ -14,7 +14,7 @@ export function setupLocation(onChange) {
     }
   }
   function update() {
-    label.textContent=selected?selected.label:"Scegli una zona di ricerca";
+    label.textContent=selected?"Entro "+radius.value+" km "+(selected.source==="device"?"dalla mia posizione":"da "+selected.label):"Scegli una zona di ricerca";
     radius.disabled=!selected;
     prompt.hidden=Boolean(selected);
     if(selected) {
